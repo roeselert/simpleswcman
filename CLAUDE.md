@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**secman** is a web application using HTML5, CSS, JavaScript
-*** PWA 
-*** now npm, import libs from CDN
+### secman** is a web application using HTML5, CSS, JavaScript
+*PWA 
+*now npm, import libs from CDN
 *** Use only minimal libs
 **** pglite: import { PGlite } from 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/index.js'
 **** mocka: import Mocha from "https://cdn.jsdelivr.net/npm/mocha@10.2.0/+esm";
