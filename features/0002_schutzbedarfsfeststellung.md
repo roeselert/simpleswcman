@@ -639,3 +639,44 @@ Then   erscheint ein Hinweis:
 |**C / I / A**              |Confidentiality (Vertraulichkeit) / Integrity (Integrität) / Availability (Verfügbarkeit)              |
 |**ISB**                    |Informationssicherheitsbeauftragter                                                                    |
 |**BSI-Standard 200-2**     |IT-Grundschutz-Methodik des Bundesamts für Sicherheit in der Informationstechnik                       |
+
+---
+
+## Implementierungsplan
+
+### Module
+
+**Modul: `src/schutzbedarfsfeststellung/`**
+
+- `repositories.js` – CRUD für schutzbedarf_kategorie, schadensbewertung, schutzbedarf_ergebnis.
+- `services.js` – Geschäftslogik:
+  - Schutzbedarfskategorien definieren (Pflicht: Konkretisierung muss ausgefüllt sein)
+  - Schadensbewertung speichern (Begründung Pflichtfeld)
+  - Schutzbedarf berechnen: Maximumprinzip über alle Bewertungen je Grundwert
+  - Kumulationseffekt: erhöht Schutzbedarf um eine Stufe mit ausreichender Begründung (≥20 Zeichen)
+  - Verteilungseffekt: reduziert Verfügbarkeits-Schutzbedarf wenn Ausfallsicherheit gegeben
+  - Vollständigkeitsprüfung: alle drei Grundwerte (C, I, A) müssen bewertet sein
+  - Status-Übergang: offen → abgeschlossen
+- `adapter.js` – Delegiert an Services mit DB-Instanz.
+
+### Abhängigkeiten
+
+- Baut auf strukturanalyse-Schema auf (informationsverbund-Tabelle muss existieren).
+- zielobjekt_id/zielobjekt_typ referenzieren strukturanalyse-Objekte (lose Kopplung via TEXT).
+
+### Schlüsselentscheidungen
+
+1. schutzbedarf_ergebnis speichert das berechnete Maximum aller schadensbewertungen je Zielobjekt.
+2. Vererbungsprinzip wird explizit im Ergebnis-Datensatz gespeichert.
+3. Kumulationseffekt erfordert Mindestbegründung (20 Zeichen) für Audit-Qualität.
+4. Verteilungseffekt nur anwendbar wenn System nicht Single-Point-of-Failure.
+
+### Akzeptanztest-Strategie
+
+- US-01: Kategorie definieren (happy path, fehlende Konkretisierung)
+- US-02: Schadensbewertung (happy path, fehlende Begründung)
+- US-03: Schutzbedarf für Anwendung (happy path – Maximum berechnet, fehlende Bewertung)
+- US-04: Schutzbedarf für IT-System via Maximumprinzip (happy path, kein System im Einsatz)
+- US-06: Maximumprinzip automatisch berechnet
+- US-07: Kumulationseffekt dokumentiert (happy path, unzureichende Begründung)
+- US-08: Verteilungseffekt (happy path, Single-Point-of-Failure)

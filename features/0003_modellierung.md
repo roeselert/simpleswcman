@@ -246,3 +246,43 @@ Schritt 7 – Ergebnis nutzen
 - [ ] Rollenrechte konfiguriert und verifiziert
 - [ ] Code-Review abgeschlossen
 - [ ] Technische Dokumentation aktualisiert
+
+---
+
+## Implementierungsplan
+
+### Module
+
+**Modul: `src/modellierung/`**
+
+- `repositories.js` – CRUD für baustein, modellierungseintrag, modellierungsdokumentation.
+- `services.js` – Geschäftslogik:
+  - Baustein anlegen und abrufen (read-only Kompendium-Referenz)
+  - Modellierungseintrag erstellen: Validierung Baustein-ID existiert, Duplikat-Prüfung
+  - Anforderungsanpassung: anforderung_angepasst=true nur wenn anpassung_details ausgefüllt
+  - Modellierung abschließen: alle Zielobjekte müssen Schutzbedarf gesetzt haben (Prüfung via schutzbedarf_ergebnis)
+  - Dokumentation erstellen: Prüfplan (Bestandssysteme) vs. Entwicklungskonzept (geplante Systeme)
+- `adapter.js` – Delegiert an Services mit DB-Instanz.
+
+### Abhängigkeiten
+
+- Baut auf strukturanalyse- und schutzbedarfsfeststellung-Schema auf.
+- Modellierungseintrag.zielobjekt_id referenziert strukturanalyse-Objekte (loose coupling via TEXT).
+
+### Schlüsselentscheidungen
+
+1. Bausteine werden als Stammdaten per Service angelegt (simuliertes Kompendium).
+2. Duplikat-Prüfung: gleiche (zielobjekt_id, baustein_id)-Kombination nicht erlaubt.
+3. Anforderungsanpassung erfordert nicht-leeres anpassung_details-Feld.
+4. Verwendungszweck der Dokumentation: 'Entwicklungskonzept' für geplante Systeme, 'Prüfplan' für Bestandssysteme.
+
+### Akzeptanztest-Strategie
+
+- AT-01: Baustein zuordnen (happy path)
+- AT-02: Vollständige Modellierung → Dokumentation als Prüfplan
+- AT-03: Anforderungsanpassung bei erhöhtem Schutzbedarf
+- AT-04: Entwicklungskonzept für geplante Systeme
+- AT-05: Modellierung ohne Schutzbedarf nicht abschließbar
+- AT-06: Ungültige Baustein-ID (Validierungsfehler)
+- AT-07: Doppelte Baustein-Zielobjekt-Zuordnung verhindert
+- AT-08: Anforderungsanpassung ohne Begründung nicht speicherbar
