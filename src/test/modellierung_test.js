@@ -8,7 +8,7 @@ import { expect } from 'chai';
 import { initDb } from '../db.js';
 import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
 import { createAdapter as createSchutzbedarfAdapter } from '../schutzbedarfsfeststellung/adapter.js';
-import { createAdapter } from './adapter.js';
+import { createAdapter } from '../modellierung/adapter.js';
 
 let db;
 let adapter;

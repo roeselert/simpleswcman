@@ -6,7 +6,7 @@
 import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
-import { createAdapter } from './adapter.js';
+import { createAdapter } from '../strukturanalyse/adapter.js';
 
 let db;
 let adapter;

@@ -7,7 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
 import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
-import { createAdapter } from './adapter.js';
+import { createAdapter } from '../schutzbedarfsfeststellung/adapter.js';
 
 let db;
 let adapter;
