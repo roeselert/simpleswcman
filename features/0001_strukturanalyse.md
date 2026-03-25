@@ -454,3 +454,40 @@
 -----
 
 *Erstellt auf Basis des BSI Online-Kurses IT-Grundschutz, Lektion 3: Strukturanalyse (BSI-Standard 200-2)*
+
+---
+
+## Implementierungsplan
+
+### Module
+
+**Modul: `src/strukturanalyse/`**
+
+- `repositories.js` – CRUD-Operationen für alle Tabellen (informationsverbund, liegenschaft, raum, geschaeftsprozess, information, anwendung, anwendung_prozess, it_system, it_system_anwendung, objektgruppe, netzverbindung). Jede Funktion nimmt eine PGlite-Instanz als ersten Parameter.
+- `services.js` – Geschäftslogik: Validierungen, Pflichtfeld-Prüfungen, Referenzprüfungen, Warnungen bei Dopplungen. Implementiert alle Regeln aus den Akzeptanztests.
+- `adapter.js` – Async-Funktionen, die eine db-Instanz erstellen/wiederverwenden und an Services delegieren.
+
+**Core: `src/db.js`**
+- Exportiert `initDb(db)`: erstellt alle Tabellen (strukturanalyse + schutzbedarfsfeststellung + modellierung) via SQL.
+
+### Schlüsselentscheidungen
+
+1. IDs werden via `crypto.randomUUID()` generiert.
+2. Arrays (org_einheiten, schutzschraenke) werden als JSON-Strings in TEXT-Spalten gespeichert.
+3. Validierungsfehler werden als JavaScript `Error` mit beschreibender Meldung geworfen.
+4. Dopplungswarnung bei Institutionsname: Service wirft einen Error mit Präfix `WARNUNG:`.
+5. Netzverbindungen referenzieren it_system direkt (kein separater Netzplan-Datensatz nötig für MVP).
+
+### Akzeptanztest-Strategie
+
+- Jeder Akzeptanztest (Happy Path + Negativtest) aus den User Stories wird als Mocha-Test implementiert.
+- Tests nutzen eine In-Memory PGlite-Instanz (kein persistenter Zustand zwischen Tests).
+- `before()` Hook initialisiert die DB-Tabellen.
+- Abgedeckte Tests:
+  - US-01: Verbund anlegen (happy path, fehlendes Pflichtfeld, Dopplung)
+  - US-02: Objektgruppe anlegen (happy path, Typ-Mismatch, leere Gruppe)
+  - US-03: Geschäftsprozess + Information (happy path, fehlende Schutzbedarfsangabe)
+  - US-04: Anwendung + Prozesszuordnung (happy path, Dopplung)
+  - US-05: Netzverbindung (happy path, gleiches Quell-/Zielsystem)
+  - US-06: IT-System (happy path, fehlendes Pflichtfeld)
+  - US-07: Liegenschaft + Raum (happy path, Raum ohne Liegenschaft)
