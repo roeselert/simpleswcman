@@ -1,7 +1,20 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git checkout:*)",
+      "Bash(npm install:*)",
+      "Read(//usr/bin/**)",
+      "Read(//root/.nvm/**)",
+      "Read(//usr/local/lib/**)",
+      "Bash(apt list:*)",
+      "Bash(DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs 2>&1 | tail -5)",
+      "Bash(wait && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs 2>&1 | tail -5)",
+      "Bash(kill 300667 2>/dev/null; sleep 3 && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs 2>&1 | tail -10)",
+      "Bash(node --version && which npm && npm --version)",
+      "Bash(DEBIAN_FRONTEND=noninteractive apt-get install -y npm 2>&1 | tail -5)",
+      "Bash(which npm:*)",
+      "Bash(node --experimental-vm-modules node_modules/.bin/mocha 'src/**/*_test.js' --timeout 10000 2>&1)"
     ]
   }
 }

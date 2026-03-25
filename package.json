@@ -1,0 +1,14 @@
+{
+  "name": "simpleswcman",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "BSI IT-Grundschutz management PWA",
+  "scripts": {
+    "test": "node --experimental-vm-modules node_modules/.bin/mocha 'src/**/*_test.js' --timeout 10000"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.2.17",
+    "chai": "^5.1.0",
+    "mocha": "^10.2.0"
+  }
+}
