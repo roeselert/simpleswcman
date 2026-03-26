@@ -9,6 +9,7 @@ import { initDb } from '../db.js';
 import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
 import { createAdapter as createSchutzbedarfAdapter } from '../schutzbedarfsfeststellung/adapter.js';
 import { createAdapter } from '../modellierung/adapter.js';
+import { withTransaction } from '../db_transaction.js';
 
 let db;
 let adapter;
@@ -317,5 +318,62 @@ describe('AT-08: Anforderungsanpassung ohne Begründung nicht speicherbar', () =
     } catch (err) {
       expect(err.message).to.include('Begründung für die Anpassung ist erforderlich');
     }
+  });
+});
+
+// ============================================================
+// Rollback-Tests
+// ============================================================
+
+describe('Rollback-Tests: Modellierung', () => {
+  it('withTransaction – Rollback bei Fehler nach mehreren Baustein-Inserts', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM baustein')).rows[0].cnt);
+
+    try {
+      await withTransaction(db, async (tx) => {
+        await tx.query(`INSERT INTO baustein (baustein_id, bezeichnung, schicht, anwendungstyp, kompendium_version)
+          VALUES ('ROLLBACK.1', 'Rollback Test 1', 'ISMS', 'Basis', '2023')`);
+        await tx.query(`INSERT INTO baustein (baustein_id, bezeichnung, schicht, anwendungstyp, kompendium_version)
+          VALUES ('ROLLBACK.2', 'Rollback Test 2', 'ORP', 'Standard', '2023')`);
+        throw new Error('Simulierter Fehler nach 2 Inserts');
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM baustein')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('bausteinAnlegen – kein Datensatz bei Validierungsfehler', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM baustein')).rows[0].cnt);
+
+    try {
+      await adapter.bausteinAnlegen({
+        baustein_id: 'FAIL.1',
+        bezeichnung: 'Fail',
+        schicht: 'UNGUELTIG',
+        anwendungstyp: 'Basis'
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM baustein')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('bausteinZuordnen – kein Eintrag bei nicht existentem Baustein', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM modellierungseintrag')).rows[0].cnt);
+
+    try {
+      await adapter.bausteinZuordnen({
+        verbund_id,
+        zielobjekt_id: fileserver_id,
+        baustein_id: 'NICHT.VORHANDEN',
+        anwendbar: true,
+        begruendung: 'Test',
+        erstellt_von: 'ISB'
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM modellierungseintrag')).rows[0].cnt);
+    expect(after).to.equal(before);
   });
 });

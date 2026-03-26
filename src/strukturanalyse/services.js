@@ -1,9 +1,11 @@
 /**
  * Strukturanalyse Services
  * Business logic for the strukturanalyse module.
+ * Each service manages its own database transaction.
  */
 
 import { randomUUID } from 'crypto';
+import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
   insertVerbund, findVerbundByName, findVerbundById, findAllVerbund, deleteVerbundById,
   insertObjektgruppe, findObjektgruppeById, findObjektgruppenByVerbund,
@@ -17,6 +19,21 @@ import {
   insertRaum, findRaumById, findRaeumeByLiegenschaft,
   insertNetzverbindung, findNetzverbindungenByVerbund, findSystemeImNetzplan
 } from './repositories.js';
+
+// ==================== Private validation helpers ====================
+// These helpers operate within the caller's transaction – they do not start their own.
+
+async function requireVerbund(tx, verbund_id) {
+  const verbund = await findVerbundById(tx, verbund_id);
+  if (!verbund) throw new Error(`Informationsverbund mit ID "${verbund_id}" nicht gefunden`);
+  return verbund;
+}
+
+async function requireProzess(tx, prozess_id) {
+  const prozess = await findProzessById(tx, prozess_id);
+  if (!prozess) throw new Error(`Prozess mit ID "${prozess_id}" nicht gefunden`);
+  return prozess;
+}
 
 // ==================== Informationsverbund ====================
 
@@ -41,36 +58,34 @@ export async function verbundAnlegen(db, data) {
     throw new Error('Erstellt-von ist ein Pflichtfeld');
   }
 
-  const existing = await findVerbundByName(db, institution_name.trim());
-  if (existing.length > 0) {
-    throw new Error(`WARNUNG: Ein Informationsverbund mit dem Namen "${institution_name}" existiert bereits. Bitte bestätigen Sie oder wählen Sie einen anderen Namen.`);
-  }
+  return withTransaction(db, async (tx) => {
+    const existing = await findVerbundByName(tx, institution_name.trim());
+    if (existing.length > 0) {
+      throw new Error(`WARNUNG: Ein Informationsverbund mit dem Namen "${institution_name}" existiert bereits. Bitte bestätigen Sie oder wählen Sie einen anderen Namen.`);
+    }
 
-  const verbund_id = randomUUID();
-  const erstellt_am = new Date().toISOString();
+    const verbund_id = randomUUID();
+    const erstellt_am = new Date().toISOString();
 
-  await insertVerbund(db, {
-    verbund_id,
-    institution_name: institution_name.trim(),
-    beschreibung: beschreibung.trim(),
-    geltungsbereich: geltungsbereich.trim(),
-    erstellt_am,
-    erstellt_von: erstellt_von.trim()
+    await insertVerbund(tx, {
+      verbund_id,
+      institution_name: institution_name.trim(),
+      beschreibung: beschreibung.trim(),
+      geltungsbereich: geltungsbereich.trim(),
+      erstellt_am,
+      erstellt_von: erstellt_von.trim()
+    });
+
+    return findVerbundById(tx, verbund_id);
   });
-
-  return await findVerbundById(db, verbund_id);
 }
 
 export async function alleVerbundeAbrufen(db) {
-  return findAllVerbund(db);
+  return withReadTransaction(db, (tx) => findAllVerbund(tx));
 }
 
 export async function verbundAbrufen(db, verbund_id) {
-  const verbund = await findVerbundById(db, verbund_id);
-  if (!verbund) {
-    throw new Error(`Informationsverbund mit ID "${verbund_id}" nicht gefunden`);
-  }
-  return verbund;
+  return withReadTransaction(db, (tx) => requireVerbund(tx, verbund_id));
 }
 
 // ==================== Objektgruppe ====================
@@ -96,24 +111,25 @@ export async function objektgruppeAnlegen(db, data) {
     throw new Error('Eine Gruppe muss mindestens ein Objekt enthalten');
   }
 
-  // Prüfe ob Verbund existiert
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  const gruppe_id = randomUUID();
-  await insertObjektgruppe(db, {
-    gruppe_id,
-    verbund_id,
-    bezeichnung: bezeichnung.trim(),
-    typ,
-    gruppierungskriterium: gruppierungskriterium || '',
-    anzahl
+    const gruppe_id = randomUUID();
+    await insertObjektgruppe(tx, {
+      gruppe_id,
+      verbund_id,
+      bezeichnung: bezeichnung.trim(),
+      typ,
+      gruppierungskriterium: gruppierungskriterium || '',
+      anzahl
+    });
+
+    return findObjektgruppeById(tx, gruppe_id);
   });
-
-  return await findObjektgruppeById(db, gruppe_id);
 }
 
 export async function objektgruppenAbrufen(db, verbund_id) {
-  return findObjektgruppenByVerbund(db, verbund_id);
+  return withReadTransaction(db, (tx) => findObjektgruppenByVerbund(tx, verbund_id));
 }
 
 // ==================== Geschäftsprozess ====================
@@ -131,32 +147,30 @@ export async function prozessAnlegen(db, data) {
     throw new Error('Verantwortlicher ist ein Pflichtfeld');
   }
 
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  const prozess_id = randomUUID();
-  await insertGeschaeftsprozess(db, {
-    prozess_id,
-    verbund_id,
-    bezeichnung: bezeichnung.trim(),
-    beschreibung: beschreibung.trim(),
-    verantwortlicher: verantwortlicher.trim(),
-    org_einheiten: org_einheiten || [],
-    rechtl_vorgaben: rechtl_vorgaben || ''
+    const prozess_id = randomUUID();
+    await insertGeschaeftsprozess(tx, {
+      prozess_id,
+      verbund_id,
+      bezeichnung: bezeichnung.trim(),
+      beschreibung: beschreibung.trim(),
+      verantwortlicher: verantwortlicher.trim(),
+      org_einheiten: org_einheiten || [],
+      rechtl_vorgaben: rechtl_vorgaben || ''
+    });
+
+    return findProzessById(tx, prozess_id);
   });
-
-  return await findProzessById(db, prozess_id);
 }
 
 export async function prozessAbrufen(db, prozess_id) {
-  const prozess = await findProzessById(db, prozess_id);
-  if (!prozess) {
-    throw new Error(`Prozess mit ID "${prozess_id}" nicht gefunden`);
-  }
-  return prozess;
+  return withReadTransaction(db, (tx) => requireProzess(tx, prozess_id));
 }
 
 export async function prozesseByVerbundAbrufen(db, verbund_id) {
-  return findProzessByVerbund(db, verbund_id);
+  return withReadTransaction(db, (tx) => findProzessByVerbund(tx, verbund_id));
 }
 
 // ==================== Information ====================
@@ -179,25 +193,27 @@ export async function informationErfassen(db, data) {
     throw new Error('Alle drei Schutzziele müssen bewertet werden');
   }
 
-  await prozessAbrufen(db, prozess_id);
+  return withTransaction(db, async (tx) => {
+    await requireProzess(tx, prozess_id);
 
-  const info_id = randomUUID();
-  await insertInformation(db, {
-    info_id,
-    prozess_id,
-    bezeichnung: bezeichnung.trim(),
-    vertraulichkeit,
-    integritaet,
-    verfuegbarkeit,
-    datenschutz_relevant: datenschutz_relevant || false
+    const info_id = randomUUID();
+    await insertInformation(tx, {
+      info_id,
+      prozess_id,
+      bezeichnung: bezeichnung.trim(),
+      vertraulichkeit,
+      integritaet,
+      verfuegbarkeit,
+      datenschutz_relevant: datenschutz_relevant || false
+    });
+
+    const infos = await findInfoByProzess(tx, prozess_id);
+    return infos.find(i => i.info_id === info_id);
   });
-
-  const infos = await findInfoByProzess(db, prozess_id);
-  return infos.find(i => i.info_id === info_id);
 }
 
 export async function informationenByProzessAbrufen(db, prozess_id) {
-  return findInfoByProzess(db, prozess_id);
+  return withReadTransaction(db, (tx) => findInfoByProzess(tx, prozess_id));
 }
 
 /**
@@ -205,11 +221,13 @@ export async function informationenByProzessAbrufen(db, prozess_id) {
  * Gibt Warnung zurück wenn keine Informationen vorhanden.
  */
 export async function prozessVollstaendigkeitPruefen(db, prozess_id) {
-  const infos = await findInfoByProzess(db, prozess_id);
-  if (infos.length === 0) {
-    throw new Error('Dem Prozess sind keine Informationen zugeordnet – bitte prüfen Sie die Vollständigkeit');
-  }
-  return { vollstaendig: true, anzahl_informationen: infos.length };
+  return withReadTransaction(db, async (tx) => {
+    const infos = await findInfoByProzess(tx, prozess_id);
+    if (infos.length === 0) {
+      throw new Error('Dem Prozess sind keine Informationen zugeordnet – bitte prüfen Sie die Vollständigkeit');
+    }
+    return { vollstaendig: true, anzahl_informationen: infos.length };
+  });
 }
 
 // ==================== Anwendung ====================
@@ -227,54 +245,63 @@ export async function anwendungErfassen(db, data) {
     throw new Error('Verantwortlicher ist ein Pflichtfeld');
   }
 
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  const existing = await findAnwendungByBezeichnung(db, verbund_id, bezeichnung.trim());
-  if (existing.length > 0) {
-    throw new Error(`WARNUNG: Eine Anwendung mit dem Namen "${bezeichnung}" existiert bereits. Bitte bestätigen Sie oder wählen Sie einen anderen Namen.`);
-  }
+    const existing = await findAnwendungByBezeichnung(tx, verbund_id, bezeichnung.trim());
+    if (existing.length > 0) {
+      throw new Error(`WARNUNG: Eine Anwendung mit dem Namen "${bezeichnung}" existiert bereits. Bitte bestätigen Sie oder wählen Sie einen anderen Namen.`);
+    }
 
-  const anwendung_id = randomUUID();
-  await insertAnwendung(db, {
-    anwendung_id,
-    verbund_id,
-    bezeichnung: bezeichnung.trim(),
-    beschreibung: beschreibung || '',
-    plattform: plattform.trim(),
-    verantwortlicher: verantwortlicher.trim()
+    const anwendung_id = randomUUID();
+    await insertAnwendung(tx, {
+      anwendung_id,
+      verbund_id,
+      bezeichnung: bezeichnung.trim(),
+      beschreibung: beschreibung || '',
+      plattform: plattform.trim(),
+      verantwortlicher: verantwortlicher.trim()
+    });
+
+    return findAnwendungById(tx, anwendung_id);
   });
-
-  return await findAnwendungById(db, anwendung_id);
 }
 
 export async function anwendungProzessZuordnen(db, anwendung_id, prozess_id) {
-  await findAnwendungById(db, anwendung_id);
-  await prozessAbrufen(db, prozess_id);
-  await insertAnwendungProzess(db, anwendung_id, prozess_id);
+  return withTransaction(db, async (tx) => {
+    const anwendung = await findAnwendungById(tx, anwendung_id);
+    if (!anwendung) throw new Error(`Anwendung ${anwendung_id} nicht gefunden`);
+    await requireProzess(tx, prozess_id);
+    await insertAnwendungProzess(tx, anwendung_id, prozess_id);
+  });
 }
 
 export async function anwendungsmatrixAbrufen(db, verbund_id) {
-  const anwendungen = await findAnwendungByVerbund(db, verbund_id);
-  const prozesse = await findProzessByVerbund(db, verbund_id);
+  return withReadTransaction(db, async (tx) => {
+    const anwendungen = await findAnwendungByVerbund(tx, verbund_id);
+    const prozesse = await findProzessByVerbund(tx, verbund_id);
 
-  const matrix = [];
-  for (const anwendung of anwendungen) {
-    const zugeordneteProzesse = await findProzesseByAnwendung(db, anwendung.anwendung_id);
-    matrix.push({
-      anwendung,
-      prozesse: zugeordneteProzesse
-    });
-  }
-  return { anwendungen, prozesse, matrix };
+    const matrix = [];
+    for (const anwendung of anwendungen) {
+      const zugeordneteProzesse = await findProzesseByAnwendung(tx, anwendung.anwendung_id);
+      matrix.push({
+        anwendung,
+        prozesse: zugeordneteProzesse
+      });
+    }
+    return { anwendungen, prozesse, matrix };
+  });
 }
 
 export async function anwendungenOhneProzessPruefen(db, verbund_id) {
-  const ohneZuordnung = await findAnwendungenOhneProzess(db, verbund_id);
-  if (ohneZuordnung.length > 0) {
-    const namen = ohneZuordnung.map(a => a.bezeichnung).join(', ');
-    throw new Error(`Folgende Anwendungen sind keinem Geschäftsprozess zugeordnet: ${namen}`);
-  }
-  return { vollstaendig: true };
+  return withReadTransaction(db, async (tx) => {
+    const ohneZuordnung = await findAnwendungenOhneProzess(tx, verbund_id);
+    if (ohneZuordnung.length > 0) {
+      const namen = ohneZuordnung.map(a => a.bezeichnung).join(', ');
+      throw new Error(`Folgende Anwendungen sind keinem Geschäftsprozess zugeordnet: ${namen}`);
+    }
+    return { vollstaendig: true };
+  });
 }
 
 // ==================== IT-System ====================
@@ -302,55 +329,62 @@ export async function itSystemErfassen(db, data) {
     throw new Error('Verantwortlicher ist ein Pflichtfeld');
   }
 
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  // Prüfe ob Raum existiert (falls angegeben)
-  if (raum_id) {
-    const raum = await findRaumById(db, raum_id);
-    if (!raum) {
-      throw new Error('Referenzierter Raum existiert nicht im System');
+    if (raum_id) {
+      const raum = await findRaumById(tx, raum_id);
+      if (!raum) {
+        throw new Error('Referenzierter Raum existiert nicht im System');
+      }
     }
-  }
 
-  const system_id = randomUUID();
-  await insertItSystem(db, {
-    system_id,
-    verbund_id,
-    bezeichnung: bezeichnung.trim(),
-    typ,
-    betriebssystem: betriebssystem.trim(),
-    status,
-    verantwortlicher: verantwortlicher.trim(),
-    raum_id: raum_id || null,
-    gruppe_id: gruppe_id || null
+    const system_id = randomUUID();
+    await insertItSystem(tx, {
+      system_id,
+      verbund_id,
+      bezeichnung: bezeichnung.trim(),
+      typ,
+      betriebssystem: betriebssystem.trim(),
+      status,
+      verantwortlicher: verantwortlicher.trim(),
+      raum_id: raum_id || null,
+      gruppe_id: gruppe_id || null
+    });
+
+    return findItSystemById(tx, system_id);
   });
-
-  return await findItSystemById(db, system_id);
 }
 
 export async function itSystemAnwendungZuordnen(db, system_id, anwendung_id) {
-  const system = await findItSystemById(db, system_id);
-  if (!system) throw new Error(`IT-System ${system_id} nicht gefunden`);
-  const anwendung = await findAnwendungById(db, anwendung_id);
-  if (!anwendung) throw new Error(`Anwendung ${anwendung_id} nicht gefunden`);
-  await insertItSystemAnwendung(db, system_id, anwendung_id);
+  return withTransaction(db, async (tx) => {
+    const system = await findItSystemById(tx, system_id);
+    if (!system) throw new Error(`IT-System ${system_id} nicht gefunden`);
+    const anwendung = await findAnwendungById(tx, anwendung_id);
+    if (!anwendung) throw new Error(`Anwendung ${anwendung_id} nicht gefunden`);
+    await insertItSystemAnwendung(tx, system_id, anwendung_id);
+  });
 }
 
 export async function itSystemAbrufen(db, system_id) {
-  const system = await findItSystemById(db, system_id);
-  if (!system) throw new Error(`IT-System ${system_id} nicht gefunden`);
-  return system;
+  return withReadTransaction(db, async (tx) => {
+    const system = await findItSystemById(tx, system_id);
+    if (!system) throw new Error(`IT-System ${system_id} nicht gefunden`);
+    return system;
+  });
 }
 
 export async function raumItSystemMatrixAbrufen(db, verbund_id) {
-  const systeme = await findItSystemByVerbund(db, verbund_id);
-  const matrix = {};
-  for (const system of systeme) {
-    const raum_id = system.raum_id || 'ohne_raum';
-    if (!matrix[raum_id]) matrix[raum_id] = [];
-    matrix[raum_id].push(system);
-  }
-  return matrix;
+  return withReadTransaction(db, async (tx) => {
+    const systeme = await findItSystemByVerbund(tx, verbund_id);
+    const matrix = {};
+    for (const system of systeme) {
+      const raum_id = system.raum_id || 'ohne_raum';
+      if (!matrix[raum_id]) matrix[raum_id] = [];
+      matrix[raum_id].push(system);
+    }
+    return matrix;
+  });
 }
 
 // ==================== Liegenschaft ====================
@@ -369,18 +403,22 @@ export async function liegenschaftAnlegen(db, data) {
     throw new Error(`Ungültiger Liegenschaftstyp: ${typ}`);
   }
 
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  const liegenschaft_id = randomUUID();
-  await insertLiegenschaft(db, { liegenschaft_id, verbund_id, bezeichnung: bezeichnung.trim(), typ });
+    const liegenschaft_id = randomUUID();
+    await insertLiegenschaft(tx, { liegenschaft_id, verbund_id, bezeichnung: bezeichnung.trim(), typ });
 
-  return await findLiegenschaftById(db, liegenschaft_id);
+    return findLiegenschaftById(tx, liegenschaft_id);
+  });
 }
 
 export async function liegenschaftAbrufen(db, liegenschaft_id) {
-  const liegenschaft = await findLiegenschaftById(db, liegenschaft_id);
-  if (!liegenschaft) throw new Error(`Liegenschaft ${liegenschaft_id} nicht gefunden`);
-  return liegenschaft;
+  return withReadTransaction(db, async (tx) => {
+    const liegenschaft = await findLiegenschaftById(tx, liegenschaft_id);
+    if (!liegenschaft) throw new Error(`Liegenschaft ${liegenschaft_id} nicht gefunden`);
+    return liegenschaft;
+  });
 }
 
 // ==================== Raum ====================
@@ -401,29 +439,32 @@ export async function raumAnlegen(db, data) {
     throw new Error('Verantwortlicher ist ein Pflichtfeld');
   }
 
-  // Prüfe ob Liegenschaft existiert
-  const liegenschaft = await findLiegenschaftById(db, liegenschaft_id);
-  if (!liegenschaft) {
-    throw new Error('Bitte wählen Sie zunächst eine Liegenschaft aus');
-  }
+  return withTransaction(db, async (tx) => {
+    const liegenschaft = await findLiegenschaftById(tx, liegenschaft_id);
+    if (!liegenschaft) {
+      throw new Error('Bitte wählen Sie zunächst eine Liegenschaft aus');
+    }
 
-  const raum_id = randomUUID();
-  await insertRaum(db, {
-    raum_id,
-    liegenschaft_id,
-    bezeichnung: bezeichnung.trim(),
-    typ,
-    verantwortlicher: verantwortlicher.trim(),
-    schutzschraenke: schutzschraenke || []
+    const raum_id = randomUUID();
+    await insertRaum(tx, {
+      raum_id,
+      liegenschaft_id,
+      bezeichnung: bezeichnung.trim(),
+      typ,
+      verantwortlicher: verantwortlicher.trim(),
+      schutzschraenke: schutzschraenke || []
+    });
+
+    return findRaumById(tx, raum_id);
   });
-
-  return await findRaumById(db, raum_id);
 }
 
 export async function raumAbrufen(db, raum_id) {
-  const raum = await findRaumById(db, raum_id);
-  if (!raum) throw new Error(`Raum ${raum_id} nicht gefunden`);
-  return raum;
+  return withReadTransaction(db, async (tx) => {
+    const raum = await findRaumById(tx, raum_id);
+    if (!raum) throw new Error(`Raum ${raum_id} nicht gefunden`);
+    return raum;
+  });
 }
 
 // ==================== Netzverbindung ====================
@@ -443,39 +484,43 @@ export async function netzverbindungAnlegen(db, data) {
     throw new Error(`Ungültiger Verbindungstyp: ${verbindungstyp}`);
   }
 
-  await verbundAbrufen(db, verbund_id);
+  return withTransaction(db, async (tx) => {
+    await requireVerbund(tx, verbund_id);
 
-  const vonSystem = await findItSystemById(db, system_von);
-  if (!vonSystem) throw new Error(`Ausgangssystem ${system_von} nicht gefunden`);
-  const nachSystem = await findItSystemById(db, system_nach);
-  if (!nachSystem) throw new Error(`Zielsystem ${system_nach} nicht gefunden`);
+    const vonSystem = await findItSystemById(tx, system_von);
+    if (!vonSystem) throw new Error(`Ausgangssystem ${system_von} nicht gefunden`);
+    const nachSystem = await findItSystemById(tx, system_nach);
+    if (!nachSystem) throw new Error(`Zielsystem ${system_nach} nicht gefunden`);
 
-  const verbindung_id = randomUUID();
-  await insertNetzverbindung(db, {
-    verbindung_id,
-    verbund_id,
-    system_von,
-    system_nach,
-    verbindungstyp,
-    verschluesselt: verschluesselt || false,
-    extern: extern || false,
-    netzsegment: netzsegment || ''
+    const verbindung_id = randomUUID();
+    await insertNetzverbindung(tx, {
+      verbindung_id,
+      verbund_id,
+      system_von,
+      system_nach,
+      verbindungstyp,
+      verschluesselt: verschluesselt || false,
+      extern: extern || false,
+      netzsegment: netzsegment || ''
+    });
+
+    return verbindung_id;
   });
-
-  return verbindung_id;
 }
 
 export async function netzplanVollstaendigkeitPruefen(db, verbund_id) {
-  const alleSysteme = await findItSystemByVerbund(db, verbund_id);
-  const systemeImPlan = await findSystemeImNetzplan(db, verbund_id);
+  return withReadTransaction(db, async (tx) => {
+    const alleSysteme = await findItSystemByVerbund(tx, verbund_id);
+    const systemeImPlan = await findSystemeImNetzplan(tx, verbund_id);
 
-  const fehlendeSysteme = alleSysteme.filter(s => !systemeImPlan.includes(s.system_id));
+    const fehlendeSysteme = alleSysteme.filter(s => !systemeImPlan.includes(s.system_id));
 
-  if (fehlendeSysteme.length > 0) {
-    const anzahl = fehlendeSysteme.length;
-    const namen = fehlendeSysteme.map(s => s.bezeichnung).join(', ');
-    throw new Error(`${anzahl} IT-System${anzahl > 1 ? 'e sind' : ' ist'} nicht im Netzplan referenziert: ${namen}`);
-  }
+    if (fehlendeSysteme.length > 0) {
+      const anzahl = fehlendeSysteme.length;
+      const namen = fehlendeSysteme.map(s => s.bezeichnung).join(', ');
+      throw new Error(`${anzahl} IT-System${anzahl > 1 ? 'e sind' : ' ist'} nicht im Netzplan referenziert: ${namen}`);
+    }
 
-  return { vollstaendig: true };
+    return { vollstaendig: true };
+  });
 }

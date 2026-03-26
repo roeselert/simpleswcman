@@ -8,6 +8,7 @@ import { expect } from 'chai';
 import { initDb } from '../db.js';
 import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
 import { createAdapter } from '../schutzbedarfsfeststellung/adapter.js';
+import { withTransaction } from '../db_transaction.js';
 
 let db;
 let adapter;
@@ -379,5 +380,58 @@ describe('US-08: Verteilungseffekt berücksichtigen', () => {
     } catch (err) {
       expect(err.message).to.include('Einzelausfall führt zum Anwendungsausfall');
     }
+  });
+});
+
+// ============================================================
+// Rollback-Tests
+// ============================================================
+
+describe('Rollback-Tests: Schutzbedarfsfeststellung', () => {
+  it('withTransaction – Rollback bei Fehler nach Insert in schutzbedarf_ergebnis', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
+
+    try {
+      await withTransaction(db, async (tx) => {
+        await tx.query(
+          `INSERT INTO schutzbedarf_ergebnis (ergebnis_id, zielobjekt_id, zielobjekt_typ, schutzbedarf_c, schutzbedarf_i, schutzbedarf_a, vererbungsprinzip, status)
+           VALUES ('rollback-sb-uuid', 'test-obj', 'Anwendung', 'normal', 'normal', 'normal', 'Maximum', 'offen')`
+        );
+        throw new Error('Simulierter Fehler nach Insert');
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('schadensbewertungSpeichern – kein Datensatz bei Validierungsfehler', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schadensbewertung')).rows[0].cnt);
+
+    try {
+      await adapter.schadensbewertungSpeichern({
+        zielobjekt_id: 'some-id',
+        zielobjekt_typ: 'Anwendung',
+        schadensszenario: 'UngültigesScenario',
+        grundwert: 'Vertraulichkeit',
+        kategorie: 'normal',
+        begruendung: 'Test',
+        bewertet_von: 'ISB'
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schadensbewertung')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('schutzbedarfBerechnen – kein Ergebnis bei fehlenden Grundwerten', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
+
+    try {
+      await adapter.schutzbedarfBerechnen('unbekannte-id', 'Anwendung', 'Test');
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
+    expect(after).to.equal(before);
   });
 });
