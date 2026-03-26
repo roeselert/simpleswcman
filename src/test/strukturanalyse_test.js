@@ -7,6 +7,7 @@ import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
 import { createAdapter } from '../strukturanalyse/adapter.js';
+import { withTransaction } from '../db_transaction.js';
 
 let db;
 let adapter;
@@ -532,5 +533,60 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
     } catch (err) {
       expect(err.message).to.include('Bitte wählen Sie zunächst eine Liegenschaft aus');
     }
+  });
+});
+
+// ============================================================
+// Rollback-Tests
+// ============================================================
+
+describe('Rollback-Tests: Strukturanalyse', () => {
+  it('withTransaction – Rollback bei Fehler nach Insert', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM informationsverbund')).rows[0].cnt);
+
+    try {
+      await withTransaction(db, async (tx) => {
+        await tx.query(
+          `INSERT INTO informationsverbund (verbund_id, institution_name, beschreibung, geltungsbereich, erstellt_am, erstellt_von)
+           VALUES ('rollback-test-uuid', 'Rollback Test', 'Test', 'Test', '2026-01-01', 'Test')`
+        );
+        throw new Error('Simulierter Fehler nach Insert');
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM informationsverbund')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('verbundAnlegen – kein Datensatz bei fehlgeschlagener Transaktion (Duplikat)', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM informationsverbund')).rows[0].cnt);
+
+    try {
+      await adapter.verbundAnlegen({
+        institution_name: 'RECPLAST GmbH',
+        beschreibung: 'Duplikat',
+        geltungsbereich: 'Außenstelle',
+        erstellt_von: 'ISB'
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM informationsverbund')).rows[0].cnt);
+    expect(after).to.equal(before);
+  });
+
+  it('prozessAnlegen – kein Datensatz bei nicht existentem Verbund', async () => {
+    const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM geschaeftsprozess')).rows[0].cnt);
+
+    try {
+      await adapter.prozessAnlegen({
+        verbund_id: 'nicht-existierende-id',
+        bezeichnung: 'Fehler-Prozess',
+        beschreibung: 'Test',
+        verantwortlicher: 'Test'
+      });
+    } catch {}
+
+    const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM geschaeftsprozess')).rows[0].cnt);
+    expect(after).to.equal(before);
   });
 });

@@ -1,9 +1,11 @@
 /**
  * Modellierung Services
  * Business logic for IT-Grundschutz modelling.
+ * Each service manages its own database transaction.
  */
 
 import { randomUUID } from 'crypto';
+import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
   insertBaustein, findBausteinById, findAlleBausteine, findBausteineBySchicht,
   insertModellierungseintrag, findEintragById, findEintragByZielobjektUndBaustein,
@@ -36,23 +38,25 @@ export async function bausteinAnlegen(db, data) {
     throw new Error(`Ungültiger Anwendungstyp: ${anwendungstyp}`);
   }
 
-  await insertBaustein(db, {
-    baustein_id: baustein_id.trim(),
-    bezeichnung: bezeichnung.trim(),
-    schicht,
-    anwendungstyp,
-    kompendium_version: kompendium_version || '2023'
-  });
+  return withTransaction(db, async (tx) => {
+    await insertBaustein(tx, {
+      baustein_id: baustein_id.trim(),
+      bezeichnung: bezeichnung.trim(),
+      schicht,
+      anwendungstyp,
+      kompendium_version: kompendium_version || '2023'
+    });
 
-  return await findBausteinById(db, baustein_id.trim());
+    return findBausteinById(tx, baustein_id.trim());
+  });
 }
 
 export async function bausteinAbrufen(db, baustein_id) {
-  return findBausteinById(db, baustein_id);
+  return withReadTransaction(db, (tx) => findBausteinById(tx, baustein_id));
 }
 
 export async function alleBausteineAbrufen(db) {
-  return findAlleBausteine(db);
+  return withReadTransaction(db, (tx) => findAlleBausteine(tx));
 }
 
 // ==================== Modellierungseintrag ====================
@@ -74,35 +78,37 @@ export async function bausteinZuordnen(db, data) {
     throw new Error('Begründung ist ein Pflichtfeld für den Modellierungseintrag');
   }
 
-  // AT-06: Baustein muss im Kompendium vorhanden sein
-  const baustein = await findBausteinById(db, baustein_id.trim());
-  if (!baustein) {
-    throw new Error(`Baustein-ID ${baustein_id} nicht im IT-Grundschutz-Kompendium vorhanden.`);
-  }
+  return withTransaction(db, async (tx) => {
+    // AT-06: Baustein muss im Kompendium vorhanden sein
+    const baustein = await findBausteinById(tx, baustein_id.trim());
+    if (!baustein) {
+      throw new Error(`Baustein-ID ${baustein_id} nicht im IT-Grundschutz-Kompendium vorhanden.`);
+    }
 
-  // AT-07: Duplikat-Prüfung
-  const existing = await findEintragByZielobjektUndBaustein(db, zielobjekt_id.trim(), baustein_id.trim());
-  if (existing) {
-    throw new Error(`Dieser Baustein ist für das Zielobjekt bereits vorhanden.`);
-  }
+    // AT-07: Duplikat-Prüfung
+    const existing = await findEintragByZielobjektUndBaustein(tx, zielobjekt_id.trim(), baustein_id.trim());
+    if (existing) {
+      throw new Error(`Dieser Baustein ist für das Zielobjekt bereits vorhanden.`);
+    }
 
-  const eintrag_id = randomUUID();
-  const erstellt_am = new Date().toISOString();
+    const eintrag_id = randomUUID();
+    const erstellt_am = new Date().toISOString();
 
-  await insertModellierungseintrag(db, {
-    eintrag_id,
-    verbund_id,
-    zielobjekt_id: zielobjekt_id.trim(),
-    baustein_id: baustein_id.trim(),
-    anwendbar: anwendbar !== false,
-    begruendung: begruendung.trim(),
-    anforderung_angepasst: false,
-    anpassung_details: '',
-    erstellt_am,
-    erstellt_von: erstellt_von || 'ISB'
+    await insertModellierungseintrag(tx, {
+      eintrag_id,
+      verbund_id,
+      zielobjekt_id: zielobjekt_id.trim(),
+      baustein_id: baustein_id.trim(),
+      anwendbar: anwendbar !== false,
+      begruendung: begruendung.trim(),
+      anforderung_angepasst: false,
+      anpassung_details: '',
+      erstellt_am,
+      erstellt_von: erstellt_von || 'ISB'
+    });
+
+    return findEintragById(tx, eintrag_id);
   });
-
-  return await findEintragById(db, eintrag_id);
 }
 
 /**
@@ -112,32 +118,34 @@ export async function bausteinZuordnen(db, data) {
 export async function anforderungAnpassen(db, eintrag_id, data) {
   const { anpassung_details, begruendung } = data;
 
-  const eintrag = await findEintragById(db, eintrag_id);
-  if (!eintrag) {
-    throw new Error(`Modellierungseintrag ${eintrag_id} nicht gefunden`);
-  }
-
   // AT-08: Anpassungsdetails sind Pflichtfeld wenn Anpassung aktiviert
   if (!anpassung_details || anpassung_details.trim() === '') {
     throw new Error('Eine Begründung für die Anpassung ist erforderlich.');
   }
 
-  await updateModellierungseintrag(db, eintrag_id, {
-    anwendbar: eintrag.anwendbar,
-    begruendung: begruendung || eintrag.begruendung,
-    anforderung_angepasst: true,
-    anpassung_details: anpassung_details.trim()
-  });
+  return withTransaction(db, async (tx) => {
+    const eintrag = await findEintragById(tx, eintrag_id);
+    if (!eintrag) {
+      throw new Error(`Modellierungseintrag ${eintrag_id} nicht gefunden`);
+    }
 
-  return await findEintragById(db, eintrag_id);
+    await updateModellierungseintrag(tx, eintrag_id, {
+      anwendbar: eintrag.anwendbar,
+      begruendung: begruendung || eintrag.begruendung,
+      anforderung_angepasst: true,
+      anpassung_details: anpassung_details.trim()
+    });
+
+    return findEintragById(tx, eintrag_id);
+  });
 }
 
 export async function eintraegeByVerbundAbrufen(db, verbund_id) {
-  return findEintraegeByVerbund(db, verbund_id);
+  return withReadTransaction(db, (tx) => findEintraegeByVerbund(tx, verbund_id));
 }
 
 export async function eintraegeByZielobjektAbrufen(db, zielobjekt_id) {
-  return findEintraegeByZielobjekt(db, zielobjekt_id);
+  return withReadTransaction(db, (tx) => findEintraegeByZielobjekt(tx, zielobjekt_id));
 }
 
 // ==================== Modellierungsdokumentation ====================
@@ -157,7 +165,6 @@ export async function dokumentationErstellen(db, data) {
   }
 
   // AT-05: Alle Zielobjekte müssen vollständigen Schutzbedarf haben
-  // zielobjektStatus ist ein Array von {zielobjekt_id, hatSchutzbedarf}
   if (zielobjektStatus && zielobjektStatus.length > 0) {
     const ohneSchutzbedarf = zielobjektStatus.filter(z => !z.hatSchutzbedarf);
     if (ohneSchutzbedarf.length > 0) {
@@ -167,27 +174,29 @@ export async function dokumentationErstellen(db, data) {
     }
   }
 
-  const eintraege = await findEintraegeByVerbund(db, verbund_id);
-  if (eintraege.length === 0) {
-    throw new Error('Keine Modellierungseinträge vorhanden. Bitte ordnen Sie zunächst Bausteine zu.');
-  }
+  return withTransaction(db, async (tx) => {
+    const eintraege = await findEintraegeByVerbund(tx, verbund_id);
+    if (eintraege.length === 0) {
+      throw new Error('Keine Modellierungseinträge vorhanden. Bitte ordnen Sie zunächst Bausteine zu.');
+    }
 
-  const dok_id = randomUUID();
-  await insertModellierungsdokumentation(db, {
-    dok_id,
-    verbund_id,
-    verwendungszweck,
-    version: version || '1.0',
-    freigegeben_am: null,
-    freigegeben_von: null
+    const dok_id = randomUUID();
+    await insertModellierungsdokumentation(tx, {
+      dok_id,
+      verbund_id,
+      verwendungszweck,
+      version: version || '1.0',
+      freigegeben_am: null,
+      freigegeben_von: null
+    });
+
+    const dok = await findDokumentationById(tx, dok_id);
+    return { dokumentation: dok, eintraege };
   });
-
-  const dok = await findDokumentationById(db, dok_id);
-  return { dokumentation: dok, eintraege };
 }
 
 export async function dokumentationenAbrufen(db, verbund_id) {
-  return findDokumentationenByVerbund(db, verbund_id);
+  return withReadTransaction(db, (tx) => findDokumentationenByVerbund(tx, verbund_id));
 }
 
 /**
@@ -212,9 +221,10 @@ export async function standardBausteineInitialisieren(db) {
     { baustein_id: 'INF.2', bezeichnung: 'Rechenzentrum sowie Serverraum', schicht: 'INF', anwendungstyp: 'Standard', kompendium_version: '2023' },
   ];
 
-  for (const baustein of standardBausteine) {
-    await insertBaustein(db, baustein);
-  }
-
-  return standardBausteine.length;
+  return withTransaction(db, async (tx) => {
+    for (const baustein of standardBausteine) {
+      await insertBaustein(tx, baustein);
+    }
+    return standardBausteine.length;
+  });
 }
