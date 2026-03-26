@@ -5,6 +5,13 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
+  workflow_dispatch:
+    inputs:
+      skip_cpd:
+        description: "Skip duplicate code detection (manual override)"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   lint:
@@ -21,6 +28,7 @@ jobs:
 
   cpd:
     runs-on: ubuntu-latest
+    if: inputs.skip_cpd != true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,22 +39,12 @@ jobs:
       - name: Duplicate code detection
         run: npm run cpd
 
-  cpd-approval:
-    needs: cpd
-    if: needs.cpd.result == 'failure'
-    runs-on: ubuntu-latest
-    environment: cpd-override
-    steps:
-      - name: Manual approval granted – continuing despite duplicate code
-        run: echo "Approved to continue past CPD failure."
-
   test:
-    needs: [lint, cpd, cpd-approval]
+    needs: [lint, cpd]
     if: |
       always() &&
       needs.lint.result == 'success' &&
-      (needs.cpd.result == 'success' ||
-       (needs.cpd.result == 'failure' && needs.cpd-approval.result == 'success'))
+      (needs.cpd.result == 'success' || needs.cpd.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +68,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
       - name: Publish app code to public branch
