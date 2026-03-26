@@ -41,8 +41,10 @@ jobs:
 
   test:
     needs: [lint, cpd]
-    if: needs.lint.result == 'success' &&
-      (needs.cpd.result == 'success' || inputs.skip_cpd == true )
+    if: |
+      always() &&
+      needs.lint.result == 'success' &&
+      (needs.cpd.result == 'success' || needs.cpd.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
