@@ -14,7 +14,8 @@
       "Bash(node --version && which npm && npm --version)",
       "Bash(DEBIAN_FRONTEND=noninteractive apt-get install -y npm 2>&1 | tail -5)",
       "Bash(which npm:*)",
-      "Bash(node --experimental-vm-modules node_modules/.bin/mocha 'src/**/*_test.js' --timeout 10000 2>&1)"
+      "Bash(node --experimental-vm-modules node_modules/.bin/mocha 'src/**/*_test.js' --timeout 10000 2>&1)",
+      "Bash(git push:*)"
     ]
   }
 }
