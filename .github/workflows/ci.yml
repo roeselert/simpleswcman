@@ -68,7 +68,7 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    if:|
+    if: |
       always() &&
       needs.test.result == 'success'
     steps:
