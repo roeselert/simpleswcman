@@ -11,9 +11,9 @@ import {
   informationErfassen, informationenByProzessAbrufen, prozessVollstaendigkeitPruefen,
   anwendungErfassen, anwendungProzessZuordnen, anwendungsmatrixAbrufen, anwendungenOhneProzessPruefen,
   itSystemErfassen, itSystemAnwendungZuordnen, itSystemAbrufen, raumItSystemMatrixAbrufen,
-  liegenschaftAnlegen, liegenschaftAbrufen,
-  raumAnlegen, raumAbrufen,
-  netzverbindungAnlegen, netzplanVollstaendigkeitPruefen
+  liegenschaftAnlegen, liegenschaftAbrufen, liegenschaftenByVerbundAbrufen,
+  raumAnlegen, raumAbrufen, raeumeByLiegenschaftAbrufen,
+  netzverbindungAnlegen, netzverbindungenByVerbundAbrufen, netzplanVollstaendigkeitPruefen
 } from './services.js';
 
 // In production this db instance is created once and reused.
@@ -61,13 +61,16 @@ export function createAdapter(db) {
     // Liegenschaft
     liegenschaftAnlegen: (data) => liegenschaftAnlegen(db, data),
     liegenschaftAbrufen: (id) => liegenschaftAbrufen(db, id),
+    liegenschaftenByVerbundAbrufen: (verbund_id) => liegenschaftenByVerbundAbrufen(db, verbund_id),
 
     // Raum
     raumAnlegen: (data) => raumAnlegen(db, data),
     raumAbrufen: (id) => raumAbrufen(db, id),
+    raeumeByLiegenschaftAbrufen: (liegenschaft_id) => raeumeByLiegenschaftAbrufen(db, liegenschaft_id),
 
     // Netzverbindung
     netzverbindungAnlegen: (data) => netzverbindungAnlegen(db, data),
+    netzverbindungenByVerbundAbrufen: (verbund_id) => netzverbindungenByVerbundAbrufen(db, verbund_id),
     netzplanVollstaendigkeitPruefen: (verbund_id) => netzplanVollstaendigkeitPruefen(db, verbund_id),
   };
 }

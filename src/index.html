@@ -7,47 +7,89 @@
   <title>secman – BSI IT-Grundschutz</title>
   <link rel="manifest" href="manifest.json">
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #333; }
-    header { background: #1a73e8; color: white; padding: 1rem 2rem; }
-    header h1 { font-size: 1.5rem; }
-    main { padding: 2rem; max-width: 960px; margin: 0 auto; }
-    .card { background: white; border-radius: 8px; padding: 1.5rem; margin-bottom: 1rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-    .module-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
-    .module-card { background: white; border-radius: 8px; padding: 1.5rem;
-                   box-shadow: 0 1px 3px rgba(0,0,0,0.1); cursor: pointer;
-                   border-left: 4px solid #1a73e8; }
-    .module-card h3 { color: #1a73e8; margin-bottom: 0.5rem; }
-    .module-card p { color: #666; font-size: 0.9rem; }
-    footer { text-align: center; padding: 2rem; color: #999; font-size: 0.8rem; }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f0f2f5; color: #333; }
+
+    header { background: #1a73e8; color: white; padding: 0.875rem 1.5rem; position: sticky; top: 0; z-index: 10; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+    header h1 { font-size: 1.1rem; font-weight: 600; }
+
+    .layout { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 48px - 36px); }
+
+    .sidebar { background: white; border-right: 1px solid #e0e0e0; padding: 0.875rem; position: sticky; top: 48px; height: calc(100vh - 48px); overflow-y: auto; }
+    .vbox { background: #f0f4ff; border-radius: 6px; padding: 0.75rem; margin-bottom: 0.875rem; }
+    .vbox.active { background: #e8f0fe; border-left: 3px solid #1a73e8; }
+    .vb-label { display: block; font-size: 0.72rem; color: #777; text-transform: uppercase; letter-spacing: 0.03em; }
+    .vb-name { display: block; font-size: 0.875rem; font-weight: 600; color: #1a73e8; margin-top: 0.2rem; word-break: break-word; }
+    .navlist { display: flex; flex-direction: column; gap: 0.2rem; }
+    .nbtn { display: block; width: 100%; text-align: left; padding: 0.55rem 0.75rem; border: none; background: transparent; border-radius: 6px; cursor: pointer; font-size: 0.85rem; color: #444; transition: background 0.15s; }
+    .nbtn:hover { background: #f0f4ff; }
+    .nbtn.active { background: #e8f0fe; color: #1a73e8; font-weight: 600; }
+
+    .pane { padding: 1.5rem; overflow-y: auto; }
+    .pane-inner { max-width: 880px; }
+    .pane-inner > h2 { font-size: 1.15rem; font-weight: 600; color: #1a73e8; margin-bottom: 1rem; }
+
+    .tabs { display: flex; flex-wrap: wrap; gap: 0.375rem; margin-bottom: 1.25rem; }
+    .tab { padding: 0.35rem 0.875rem; border: 1px solid #ddd; background: white; border-radius: 20px; cursor: pointer; font-size: 0.8rem; color: #555; transition: all 0.15s; }
+    .tab:hover { border-color: #1a73e8; color: #1a73e8; }
+    .tab.active { background: #1a73e8; color: white; border-color: #1a73e8; }
+
+    .card { background: white; border-radius: 8px; padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.08); margin-bottom: 1rem; }
+    .card h3 { font-size: 0.9rem; font-weight: 600; margin-bottom: 1rem; color: #555; }
+
+    .fg { margin-bottom: 0.75rem; }
+    .fg label { display: block; font-size: 0.775rem; font-weight: 600; color: #555; margin-bottom: 0.3rem; }
+    .fg input, .fg select, .fg textarea { width: 100%; padding: 0.45rem 0.6rem; border: 1px solid #ddd; border-radius: 4px; font-size: 0.85rem; font-family: inherit; background: white; }
+    .fg input:focus, .fg select:focus, .fg textarea:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.15); }
+    .fg-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0.75rem; }
+    .fg-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+    .fg-inline { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: #555; cursor: pointer; }
+    .fg-inline input[type=checkbox] { width: auto; margin: 0; cursor: pointer; }
+
+    .btn { padding: 0.45rem 1rem; background: #1a73e8; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: 500; transition: background 0.15s; }
+    .btn:hover { background: #1557b0; }
+    .btn-sm { padding: 0.28rem 0.6rem; font-size: 0.775rem; }
+    .btn-success { background: #2e7d32; }
+    .btn-success:hover { background: #1b5e20; }
+    .btn-secondary { background: #546e7a; }
+    .btn-secondary:hover { background: #37474f; }
+
+    .msg { padding: 0.65rem 0.875rem; border-radius: 4px; margin-bottom: 0.875rem; font-size: 0.85rem; }
+    .msg.success { background: #e8f5e9; color: #2e7d32; border-left: 3px solid #4caf50; }
+    .msg.error { background: #fce4ec; color: #b71c1c; border-left: 3px solid #e53935; }
+    .msg.warning { background: #fff8e1; color: #e65100; border-left: 3px solid #ffa000; }
+
+    .tbl { width: 100%; border-collapse: collapse; font-size: 0.825rem; }
+    .tbl th { background: #f8f9fa; padding: 0.45rem 0.75rem; text-align: left; font-weight: 600; font-size: 0.775rem; color: #666; border-bottom: 2px solid #eee; white-space: nowrap; }
+    .tbl td { padding: 0.45rem 0.75rem; border-bottom: 1px solid #f0f0f0; vertical-align: middle; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl tr:hover td { background: #f8f9fb; }
+    .empty { color: #aaa; text-align: center; padding: 1.5rem; font-style: italic; font-size: 0.85rem; }
+
+    .badge { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 600; white-space: nowrap; }
+    .badge-normal { background: #e8f5e9; color: #2e7d32; }
+    .badge-hoch { background: #fff8e1; color: #e65100; }
+    .badge-sehr-hoch, .badge-sehr { background: #fce4ec; color: #b71c1c; }
+
+    .loading { text-align: center; color: #999; padding: 3rem; font-size: 0.9rem; }
+
+    footer { text-align: center; padding: 0.75rem 2rem; color: #aaa; font-size: 0.75rem; background: white; border-top: 1px solid #eee; }
+
+    @media (max-width: 640px) {
+      .layout { grid-template-columns: 1fr; }
+      .sidebar { position: static; height: auto; border-right: none; border-bottom: 1px solid #eee; }
+      .fg-row, .fg-2col { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
   <header>
     <h1>secman – BSI IT-Grundschutz Management</h1>
   </header>
-  <main>
-    <div class="card">
-      <h2>Willkommen</h2>
-      <p>BSI IT-Grundschutz Werkzeug für Informationssicherheitsbeauftragte.</p>
-    </div>
-    <div class="module-grid">
-      <div class="module-card">
-        <h3>Strukturanalyse</h3>
-        <p>Informationsverbund, IT-Systeme, Anwendungen, Räume und Netzplan erfassen.</p>
-      </div>
-      <div class="module-card">
-        <h3>Schutzbedarfsfeststellung</h3>
-        <p>Schutzbedarf für alle Zielobjekte festlegen und dokumentieren.</p>
-      </div>
-      <div class="module-card">
-        <h3>Modellierung</h3>
-        <p>IT-Grundschutz-Bausteine zuordnen und Modellierung dokumentieren.</p>
-      </div>
-    </div>
-  </main>
-  <footer>secman v1.0.1 from public – BSI IT-Grundschutz gemäß BSI-Standard 200-2</footer>
+  <div id="app">
+    <p class="loading">Anwendung wird geladen…</p>
+  </div>
+  <footer>secman v1.0.1 – BSI IT-Grundschutz gemäß BSI-Standard 200-2</footer>
   <script type="module" src="app.js"></script>
 </body>
 </html>

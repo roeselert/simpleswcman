@@ -4,7 +4,9 @@
  * Each service manages its own database transaction.
  */
 
-import { randomUUID } from 'crypto';
+const randomUUID = globalThis.crypto?.randomUUID
+  ? () => globalThis.crypto.randomUUID()
+  : (await import('node:crypto')).randomUUID;
 import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
   insertVerbund, findVerbundByName, findVerbundById, findAllVerbund,
@@ -15,9 +17,9 @@ import {
   insertAnwendungProzess, findProzesseByAnwendung, findAnwendungenOhneProzess,
   insertItSystem, findItSystemById, findItSystemByVerbund,
   insertItSystemAnwendung,
-  insertLiegenschaft, findLiegenschaftById,
-  insertRaum, findRaumById,
-  insertNetzverbindung, findSystemeImNetzplan
+  insertLiegenschaft, findLiegenschaftById, findLiegenschaftenByVerbund,
+  insertRaum, findRaumById, findRaeumeByLiegenschaft,
+  insertNetzverbindung, findSystemeImNetzplan, findNetzverbindungenByVerbund
 } from './repositories.js';
 
 // ==================== Private validation helpers ====================
@@ -506,6 +508,18 @@ export async function netzverbindungAnlegen(db, data) {
 
     return verbindung_id;
   });
+}
+
+export async function liegenschaftenByVerbundAbrufen(db, verbund_id) {
+  return withReadTransaction(db, (tx) => findLiegenschaftenByVerbund(tx, verbund_id));
+}
+
+export async function raeumeByLiegenschaftAbrufen(db, liegenschaft_id) {
+  return withReadTransaction(db, (tx) => findRaeumeByLiegenschaft(tx, liegenschaft_id));
+}
+
+export async function netzverbindungenByVerbundAbrufen(db, verbund_id) {
+  return withReadTransaction(db, (tx) => findNetzverbindungenByVerbund(tx, verbund_id));
 }
 
 export async function netzplanVollstaendigkeitPruefen(db, verbund_id) {

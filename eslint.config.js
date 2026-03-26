@@ -13,6 +13,8 @@ export default [
         console: "readonly",
         fetch: "readonly",
         navigator: "readonly",
+        FormData: "readonly",
+        crypto: "readonly",
       },
     },
     rules: {

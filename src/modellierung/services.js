@@ -4,7 +4,9 @@
  * Each service manages its own database transaction.
  */
 
-import { randomUUID } from 'crypto';
+const randomUUID = globalThis.crypto?.randomUUID
+  ? () => globalThis.crypto.randomUUID()
+  : (await import('node:crypto')).randomUUID;
 import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
   insertBaustein, findBausteinById, findAlleBausteine,
