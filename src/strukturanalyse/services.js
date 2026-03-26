@@ -7,17 +7,17 @@
 import { randomUUID } from 'crypto';
 import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
-  insertVerbund, findVerbundByName, findVerbundById, findAllVerbund, deleteVerbundById,
+  insertVerbund, findVerbundByName, findVerbundById, findAllVerbund,
   insertObjektgruppe, findObjektgruppeById, findObjektgruppenByVerbund,
   insertGeschaeftsprozess, findProzessById, findProzessByVerbund,
   insertInformation, findInfoByProzess,
   insertAnwendung, findAnwendungByBezeichnung, findAnwendungById, findAnwendungByVerbund,
   insertAnwendungProzess, findProzesseByAnwendung, findAnwendungenOhneProzess,
   insertItSystem, findItSystemById, findItSystemByVerbund,
-  insertItSystemAnwendung, findAnwendungenBySystem, findSystemeByRaum,
-  insertLiegenschaft, findLiegenschaftById, findLiegenschaftenByVerbund,
-  insertRaum, findRaumById, findRaeumeByLiegenschaft,
-  insertNetzverbindung, findNetzverbindungenByVerbund, findSystemeImNetzplan
+  insertItSystemAnwendung,
+  insertLiegenschaft, findLiegenschaftById,
+  insertRaum, findRaumById,
+  insertNetzverbindung, findSystemeImNetzplan
 } from './repositories.js';
 
 // ==================== Private validation helpers ====================

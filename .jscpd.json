@@ -1,0 +1,9 @@
+{
+  "threshold": 5,
+  "minLines": 5,
+  "minTokens": 50,
+  "path": ["src"],
+  "ignore": ["**/*_test.js"],
+  "reporters": ["console"],
+  "exitCode": 1
+}

@@ -84,7 +84,7 @@ export async function findErgebnisByZielobjekt(db, zielobjekt_id) {
   return res.rows[0] || null;
 }
 
-export async function findAlleErgebnisseByVerbund(db, verbund_id) {
+export async function findAlleErgebnisseByVerbund(db, _verbund_id) {
   // We join through zielobjekt_id - we query all ergebnisse and filter by verbund through it_system or anwendung
   // Since zielobjekt_id is a loose reference, we return all and let caller filter
   const res = await db.query(`SELECT * FROM schutzbedarf_ergebnis`);

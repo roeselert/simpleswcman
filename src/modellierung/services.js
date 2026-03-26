@@ -7,7 +7,7 @@
 import { randomUUID } from 'crypto';
 import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
-  insertBaustein, findBausteinById, findAlleBausteine, findBausteineBySchicht,
+  insertBaustein, findBausteinById, findAlleBausteine,
   insertModellierungseintrag, findEintragById, findEintragByZielobjektUndBaustein,
   findEintraegeByVerbund, findEintraegeByZielobjekt, updateModellierungseintrag,
   insertModellierungsdokumentation, findDokumentationById, findDokumentationenByVerbund
@@ -157,7 +157,7 @@ export async function eintraegeByZielobjektAbrufen(db, zielobjekt_id) {
  * @param {string} verwendungszweck - 'Prüfplan' oder 'Entwicklungskonzept'
  */
 export async function dokumentationErstellen(db, data) {
-  const { verbund_id, verwendungszweck, version, erstellt_von, zielobjektStatus } = data;
+  const { verbund_id, verwendungszweck, version, _erstellt_von, zielobjektStatus } = data;
 
   const erlaubteZwecke = ['Prüfplan', 'Entwicklungskonzept'];
   if (!verwendungszweck || !erlaubteZwecke.includes(verwendungszweck)) {

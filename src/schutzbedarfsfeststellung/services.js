@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto';
 import { withTransaction, withReadTransaction } from '../db_transaction.js';
 import {
   insertSchutzbedarfKategorie, findKategorieById, findKategorienByVerbund,
-  insertSchadensbewertung, findBewertungById, findBewertungenByZielobjekt, updateBewertungStatus,
+  insertSchadensbewertung, findBewertungById, findBewertungenByZielobjekt,
   upsertSchutzbedarfErgebnis, findErgebnisByZielobjekt, updateErgebnisStatus
 } from './repositories.js';
 
@@ -193,7 +193,7 @@ export async function schutzbedarfAbrufen(db, zielobjekt_id) {
  * Begründung muss mindestens 20 Zeichen haben.
  */
 export async function kumulationseffektDokumentieren(db, data) {
-  const { zielobjekt_id, zielobjekt_typ, grundwert, begruendung, bewertet_von } = data;
+  const { zielobjekt_id, zielobjekt_typ, grundwert, begruendung, _bewertet_von } = data;
 
   if (!begruendung || begruendung.trim().length < 20) {
     throw new Error('Bitte begründen Sie den Kumulationseffekt ausführlich.');
@@ -242,7 +242,7 @@ export async function kumulationseffektDokumentieren(db, data) {
  * Nur anwendbar wenn mehr als ein System betroffen (ausfallsicher = true).
  */
 export async function verteilungseffektDokumentieren(db, data) {
-  const { zielobjekt_id, zielobjekt_typ, ausfallsicher, neue_verfuegbarkeit, begruendung, bewertet_von } = data;
+  const { zielobjekt_id, zielobjekt_typ, ausfallsicher, neue_verfuegbarkeit, begruendung, _bewertet_von } = data;
 
   if (!ausfallsicher) {
     throw new Error('Verteilungseffekt nicht anwendbar: Einzelausfall führt zum Anwendungsausfall.');

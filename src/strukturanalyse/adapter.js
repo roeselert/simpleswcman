@@ -18,7 +18,7 @@ import {
 
 // In production this db instance is created once and reused.
 // Tests inject their own db via createAdapter(db).
-let _db = null;
+const _db = null;
 
 /**
  * Creates an adapter bound to a specific db instance.
