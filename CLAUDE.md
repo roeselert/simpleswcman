@@ -20,7 +20,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Group modules around business domains. Use a folder per module.
 - Use three files per module: services, repositories and adapter
 - repositories: database access
-    - serives: business logic, transaction, controll
+    - serives: business logic, transaction control: 
+      Eeach service must start and commit/rollback the database connection. 
+      Every services needs a test to verify the rollback. Read only services must start a read-only transaction and don't need a rollback test.
     - adapter, export services for the frontend
     - local adapter: invoke services directly
     - rest adapter: expose serives via rest (implement later)
