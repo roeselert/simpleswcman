@@ -68,7 +68,9 @@ jobs:
   publish:
     needs: test
     runs-on: ubuntu-latest
-    if: needs.test.result == 'success'
+    if:|
+      always() &&
+      needs.test.result == 'success'
     steps:
       - uses: actions/checkout@v4
       - name: Publish app code to public branch
