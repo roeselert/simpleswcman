@@ -65,30 +65,3 @@ jobs:
           name: test-report
           path: test-report.json
 
-  publish:
-    needs: test
-    runs-on: ubuntu-latest
-    if: |
-      always() &&
-      needs.test.result == 'success'
-    steps:
-      - uses: actions/checkout@v4
-      - name: Publish app code to public branch
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-
-          SHA=$(git rev-parse --short HEAD)
-
-          cp -r src /tmp/app
-          rm -rf /tmp/app/test
-          rm -f /tmp/app/review_findings.md
-
-          git checkout --orphan public
-          git rm -rf .
-
-          cp -r /tmp/app/. .
-
-          git add .
-          git diff --cached --quiet || git commit -m "Publish app from main@${SHA}"
-          git push --force origin public

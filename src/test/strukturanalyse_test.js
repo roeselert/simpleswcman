@@ -6,16 +6,14 @@
 import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
-import { createAdapter } from '../strukturanalyse/adapter.js';
+import * as svc from '../strukturanalyse/services.js';
 import { withTransaction } from '../db_transaction.js';
 
 let db;
-let adapter;
 
 before(async () => {
   db = new PGlite();
   await initDb(db);
-  adapter = createAdapter(db);
 });
 
 // ============================================================
@@ -24,7 +22,7 @@ before(async () => {
 
 describe('US-01: Informationsverbund definieren', () => {
   it('Happy Path – Verbund erfolgreich anlegen', async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'RECPLAST GmbH',
       beschreibung: 'Kunststoffverarbeitung',
       geltungsbereich: 'Hauptstandort Bonn',
@@ -39,7 +37,7 @@ describe('US-01: Informationsverbund definieren', () => {
 
   it('Negativtest 1 – Pflichtfeld Institutionsname fehlt', async () => {
     try {
-      await adapter.verbundAnlegen({
+      await svc.verbundAnlegen(db, {
         institution_name: '',
         beschreibung: 'Test',
         geltungsbereich: 'Bonn',
@@ -53,7 +51,7 @@ describe('US-01: Informationsverbund definieren', () => {
 
   it('Negativtest 2 – Doppelter Verbundname', async () => {
     try {
-      await adapter.verbundAnlegen({
+      await svc.verbundAnlegen(db, {
         institution_name: 'RECPLAST GmbH',
         beschreibung: 'Zweite Instanz',
         geltungsbereich: 'Außenstelle',
@@ -75,7 +73,7 @@ describe('US-02: Objekte sinnvoll gruppieren', () => {
   let verbund_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'Gruppe-Test GmbH',
       beschreibung: 'Test',
       geltungsbereich: 'Hauptstandort',
@@ -85,7 +83,7 @@ describe('US-02: Objekte sinnvoll gruppieren', () => {
   });
 
   it('Happy Path – Gruppe mit 12 Client-PCs anlegen', async () => {
-    const gruppe = await adapter.objektgruppeAnlegen({
+    const gruppe = await svc.objektgruppeAnlegen(db, {
       verbund_id,
       bezeichnung: 'Client-PCs Buchhaltung',
       typ: 'IT-System',
@@ -104,7 +102,7 @@ describe('US-02: Objekte sinnvoll gruppieren', () => {
     // einen einzigen Typ hat. In der UI würde man prüfen ob ausgewählte Objekte
     // alle denselben Typ haben. Der Service wirft einen Fehler bei ungültigem Typ.
     try {
-      await adapter.objektgruppeAnlegen({
+      await svc.objektgruppeAnlegen(db, {
         verbund_id,
         bezeichnung: 'Gemischte Gruppe',
         typ: 'UnbekannterTyp',
@@ -118,7 +116,7 @@ describe('US-02: Objekte sinnvoll gruppieren', () => {
 
   it('Negativtest 2 – Leere Gruppe (anzahl < 1)', async () => {
     try {
-      await adapter.objektgruppeAnlegen({
+      await svc.objektgruppeAnlegen(db, {
         verbund_id,
         bezeichnung: 'Leere Gruppe',
         typ: 'IT-System',
@@ -140,7 +138,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
   let prozess_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'Prozess-Test AG',
       beschreibung: 'Test AG',
       geltungsbereich: 'Hauptsitz',
@@ -150,7 +148,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
   });
 
   it('Happy Path – Prozess mit Information anlegen', async () => {
-    const prozess = await adapter.prozessAnlegen({
+    const prozess = await svc.prozessAnlegen(db, {
       verbund_id,
       bezeichnung: 'Auftragsabwicklung',
       beschreibung: 'Verarbeitung von Kundenaufträgen',
@@ -160,7 +158,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
 
     expect(prozess.bezeichnung).to.equal('Auftragsabwicklung');
 
-    const info = await adapter.informationErfassen({
+    const info = await svc.informationErfassen(db, {
       prozess_id,
       bezeichnung: 'Kundendaten',
       vertraulichkeit: 'hoch',
@@ -176,7 +174,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
 
   it('Negativtest 1 – Verfügbarkeit nicht bewertet', async () => {
     try {
-      await adapter.informationErfassen({
+      await svc.informationErfassen(db, {
         prozess_id,
         bezeichnung: 'Lieferantendaten',
         vertraulichkeit: 'normal',
@@ -190,7 +188,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
   });
 
   it('Negativtest 2 – Prozess ohne Information als vollständig markieren', async () => {
-    const leererProzess = await adapter.prozessAnlegen({
+    const leererProzess = await svc.prozessAnlegen(db, {
       verbund_id,
       bezeichnung: 'Leerer Prozess',
       beschreibung: 'Keine Informationen',
@@ -198,7 +196,7 @@ describe('US-03: Geschäftsprozesse und Informationen erheben', () => {
     });
 
     try {
-      await adapter.prozessVollstaendigkeitPruefen(leererProzess.prozess_id);
+      await svc.prozessVollstaendigkeitPruefen(db, leererProzess.prozess_id);
       expect.fail('Sollte einen Fehler werfen');
     } catch (err) {
       expect(err.message).to.include('keine Informationen zugeordnet');
@@ -216,7 +214,7 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
   let prozess2_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'Anwendung-Test GmbH',
       beschreibung: 'Test',
       geltungsbereich: 'Hauptsitz',
@@ -224,7 +222,7 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
     });
     verbund_id = verbund.verbund_id;
 
-    const p1 = await adapter.prozessAnlegen({
+    const p1 = await svc.prozessAnlegen(db, {
       verbund_id,
       bezeichnung: 'Auftragsabwicklung',
       beschreibung: 'Auftragsabwicklung',
@@ -232,7 +230,7 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
     });
     prozess1_id = p1.prozess_id;
 
-    const p2 = await adapter.prozessAnlegen({
+    const p2 = await svc.prozessAnlegen(db, {
       verbund_id,
       bezeichnung: 'Buchhaltung',
       beschreibung: 'Buchführung',
@@ -242,24 +240,24 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
   });
 
   it('Happy Path – ERP-System beiden Prozessen zuordnen', async () => {
-    const anwendung = await adapter.anwendungErfassen({
+    const anwendung = await svc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'ERP-System',
       plattform: 'Windows Server 2022',
       verantwortlicher: 'IT-Leiter'
     });
 
-    await adapter.anwendungProzessZuordnen(anwendung.anwendung_id, prozess1_id);
-    await adapter.anwendungProzessZuordnen(anwendung.anwendung_id, prozess2_id);
+    await svc.anwendungProzessZuordnen(db, anwendung.anwendung_id, prozess1_id);
+    await svc.anwendungProzessZuordnen(db, anwendung.anwendung_id, prozess2_id);
 
-    const matrix = await adapter.anwendungsmatrixAbrufen(verbund_id);
+    const matrix = await svc.anwendungsmatrixAbrufen(db, verbund_id);
     const erpEntry = matrix.matrix.find(e => e.anwendung.bezeichnung === 'ERP-System');
     expect(erpEntry).to.exist;
     expect(erpEntry.prozesse).to.have.length(2);
   });
 
   it('Negativtest – Anwendung ohne Prozesszuordnung bei Abschluss', async () => {
-    await adapter.anwendungErfassen({
+    await svc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'E-Mail-Client',
       plattform: 'Windows',
@@ -267,7 +265,7 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
     });
 
     try {
-      await adapter.anwendungenOhneProzessPruefen(verbund_id);
+      await svc.anwendungenOhneProzessPruefen(db, verbund_id);
       expect.fail('Sollte einen Fehler werfen');
     } catch (err) {
       expect(err.message).to.include('E-Mail-Client');
@@ -276,7 +274,7 @@ describe('US-04: Anwendungen erheben und Prozessen zuordnen', () => {
 
   it('Negativtest – Doppelanlage einer Anwendung', async () => {
     try {
-      await adapter.anwendungErfassen({
+      await svc.anwendungErfassen(db, {
         verbund_id,
         bezeichnung: 'ERP-System',
         plattform: 'Windows',
@@ -300,7 +298,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
   let system2_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'Netzplan-Test GmbH',
       beschreibung: 'Test',
       geltungsbereich: 'Hauptsitz',
@@ -308,7 +306,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
     });
     verbund_id = verbund.verbund_id;
 
-    const s1 = await adapter.itSystemErfassen({
+    const s1 = await svc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Server-01',
       typ: 'Server',
@@ -318,7 +316,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
     });
     system1_id = s1.system_id;
 
-    const s2 = await adapter.itSystemErfassen({
+    const s2 = await svc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Client-PC-Gruppe',
       typ: 'Client',
@@ -330,7 +328,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
   });
 
   it('Happy Path – LAN-Verbindung anlegen', async () => {
-    const verbindung_id = await adapter.netzverbindungAnlegen({
+    const verbindung_id = await svc.netzverbindungAnlegen(db, {
       verbund_id,
       system_von: system1_id,
       system_nach: system2_id,
@@ -344,7 +342,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
 
   it('Negativtest 1 – Nicht alle Systeme im Netzplan', async () => {
     // Lege ein System an, das nicht im Netzplan ist
-    await adapter.itSystemErfassen({
+    await svc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Isoliertes System',
       typ: 'Server',
@@ -354,7 +352,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
     });
 
     try {
-      await adapter.netzplanVollstaendigkeitPruefen(verbund_id);
+      await svc.netzplanVollstaendigkeitPruefen(db, verbund_id);
       expect.fail('Sollte einen Fehler werfen');
     } catch (err) {
       expect(err.message).to.include('nicht im Netzplan referenziert');
@@ -364,7 +362,7 @@ describe('US-05: Netzplan erstellen und dokumentieren', () => {
 
   it('Negativtest 2 – Gleiches Quell- und Zielsystem', async () => {
     try {
-      await adapter.netzverbindungAnlegen({
+      await svc.netzverbindungAnlegen(db, {
         verbund_id,
         system_von: system1_id,
         system_nach: system1_id,
@@ -385,7 +383,7 @@ describe('US-06: IT-Systeme erheben', () => {
   let verbund_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'IT-System-Test AG',
       beschreibung: 'Test',
       geltungsbereich: 'Hauptsitz',
@@ -396,26 +394,26 @@ describe('US-06: IT-Systeme erheben', () => {
 
   it('Happy Path – Server erfassen mit Raum und Anwendung', async () => {
     // Liegenschaft und Raum anlegen
-    const liegenschaft = await adapter.liegenschaftAnlegen({
+    const liegenschaft = await svc.liegenschaftAnlegen(db, {
       verbund_id,
       bezeichnung: 'Hauptstandort',
       typ: 'Hauptstandort'
     });
-    const raum = await adapter.raumAnlegen({
+    const raum = await svc.raumAnlegen(db, {
       liegenschaft_id: liegenschaft.liegenschaft_id,
       bezeichnung: 'Serverraum EG',
       typ: 'Serverraum',
       verantwortlicher: 'IT-Leiter'
     });
 
-    const anwendung = await adapter.anwendungErfassen({
+    const anwendung = await svc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'ERP-System-IT',
       plattform: 'Windows Server',
       verantwortlicher: 'IT'
     });
 
-    const system = await adapter.itSystemErfassen({
+    const system = await svc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'SRV-01',
       typ: 'Server',
@@ -425,7 +423,7 @@ describe('US-06: IT-Systeme erheben', () => {
       raum_id: raum.raum_id
     });
 
-    await adapter.itSystemAnwendungZuordnen(system.system_id, anwendung.anwendung_id);
+    await svc.itSystemAnwendungZuordnen(db, system.system_id, anwendung.anwendung_id);
 
     expect(system.bezeichnung).to.equal('SRV-01');
     expect(system.raum_id).to.equal(raum.raum_id);
@@ -433,7 +431,7 @@ describe('US-06: IT-Systeme erheben', () => {
 
   it('Negativtest 1 – Pflichtfeld Typ fehlt', async () => {
     try {
-      await adapter.itSystemErfassen({
+      await svc.itSystemErfassen(db, {
         verbund_id,
         bezeichnung: 'Test-Server',
         typ: '',
@@ -449,7 +447,7 @@ describe('US-06: IT-Systeme erheben', () => {
 
   it('Negativtest 2 – IT-System in nicht existentem Raum', async () => {
     try {
-      await adapter.itSystemErfassen({
+      await svc.itSystemErfassen(db, {
         verbund_id,
         bezeichnung: 'Phantom-Server',
         typ: 'Server',
@@ -473,7 +471,7 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
   let verbund_id;
 
   before(async () => {
-    const verbund = await adapter.verbundAnlegen({
+    const verbund = await svc.verbundAnlegen(db, {
       institution_name: 'Raum-Test GmbH',
       beschreibung: 'Test',
       geltungsbereich: 'Hauptsitz',
@@ -483,7 +481,7 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
   });
 
   it('Happy Path – Liegenschaft und Raum mit Schutzschrank anlegen', async () => {
-    const liegenschaft = await adapter.liegenschaftAnlegen({
+    const liegenschaft = await svc.liegenschaftAnlegen(db, {
       verbund_id,
       bezeichnung: 'Hauptstandort Bonn',
       typ: 'Hauptstandort'
@@ -491,7 +489,7 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
 
     expect(liegenschaft.bezeichnung).to.equal('Hauptstandort Bonn');
 
-    const raum = await adapter.raumAnlegen({
+    const raum = await svc.raumAnlegen(db, {
       liegenschaft_id: liegenschaft.liegenschaft_id,
       bezeichnung: 'Serverraum EG',
       typ: 'Serverraum',
@@ -509,7 +507,7 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
 
   it('Negativtest 1 – Raum ohne Liegenschaft', async () => {
     try {
-      await adapter.raumAnlegen({
+      await svc.raumAnlegen(db, {
         liegenschaft_id: 'nicht-existierend',
         bezeichnung: 'Büro 1',
         typ: 'Büro',
@@ -523,7 +521,7 @@ describe('US-07: Räume und Liegenschaften erfassen', () => {
 
   it('Negativtest 2 – Raum ohne liegenschaft_id angegeben', async () => {
     try {
-      await adapter.raumAnlegen({
+      await svc.raumAnlegen(db, {
         liegenschaft_id: '',
         bezeichnung: 'Büro 2',
         typ: 'Büro',
@@ -562,7 +560,7 @@ describe('Rollback-Tests: Strukturanalyse', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM informationsverbund')).rows[0].cnt);
 
     try {
-      await adapter.verbundAnlegen({
+      await svc.verbundAnlegen(db, {
         institution_name: 'RECPLAST GmbH',
         beschreibung: 'Duplikat',
         geltungsbereich: 'Außenstelle',
@@ -578,7 +576,7 @@ describe('Rollback-Tests: Strukturanalyse', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM geschaeftsprozess')).rows[0].cnt);
 
     try {
-      await adapter.prozessAnlegen({
+      await svc.prozessAnlegen(db, {
         verbund_id: 'nicht-existierende-id',
         bezeichnung: 'Fehler-Prozess',
         beschreibung: 'Test',

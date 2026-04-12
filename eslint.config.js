@@ -15,6 +15,10 @@ export default [
         navigator: "readonly",
         FormData: "readonly",
         crypto: "readonly",
+        URL: "readonly",
+        URLSearchParams: "readonly",
+        process: "readonly",
+        Buffer: "readonly",
       },
     },
     rules: {

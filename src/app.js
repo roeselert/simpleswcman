@@ -1,21 +1,15 @@
 /**
  * secman – BSI IT-Grundschutz Management
- * Single-page app initializing PGlite and rendering all 3 feature modules.
+ * Browser client. Talks to the secman REST backend over HTTP.
  */
-import { PGlite } from 'https://cdn.jsdelivr.net/npm/@electric-sql/pglite/dist/index.js';
-import { initDb } from './db.js';
-import { createAdapter as createSAAdapter } from './strukturanalyse/adapter.js';
-import { createAdapter as createSBAdapter } from './schutzbedarfsfeststellung/adapter.js';
-import { createAdapter as createModAdapter } from './modellierung/adapter.js';
-
-// Service Worker registration for PWA
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('/sw.js').catch(() => {});
-}
+import {
+  createStrukturanalyseClient,
+  createSchutzbedarfClient,
+  createModellierungClient,
+} from './rest_client.js';
 
 // ─── State ────────────────────────────────────────────────────────────────────
 const S = {
-  db: null,
   sa: null,
   sb: null,
   mod: null,
@@ -28,11 +22,9 @@ const S = {
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 async function init() {
   try {
-    S.db = new PGlite();
-    await initDb(S.db);
-    S.sa = createSAAdapter(S.db);
-    S.sb = createSBAdapter(S.db);
-    S.mod = createModAdapter(S.db);
+    S.sa = createStrukturanalyseClient();
+    S.sb = createSchutzbedarfClient();
+    S.mod = createModellierungClient();
     renderShell();
   } catch (e) {
     document.getElementById('app').innerHTML = msgHtml(e.message, 'error');
