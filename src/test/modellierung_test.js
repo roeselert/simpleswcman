@@ -6,15 +6,11 @@
 import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
-import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
-import { createAdapter as createSchutzbedarfAdapter } from '../schutzbedarfsfeststellung/adapter.js';
-import { createAdapter } from '../modellierung/adapter.js';
+import * as strukturSvc from '../strukturanalyse/services.js';
+import * as svc from '../modellierung/services.js';
 import { withTransaction } from '../db_transaction.js';
 
 let db;
-let adapter;
-let strukturAdapter;
-let schutzbedarfAdapter;
 let verbund_id;
 let fileserver_id;
 let webserver_id;
@@ -22,15 +18,12 @@ let webserver_id;
 before(async () => {
   db = new PGlite();
   await initDb(db);
-  adapter = createAdapter(db);
-  strukturAdapter = createStrukturAdapter(db);
-  schutzbedarfAdapter = createSchutzbedarfAdapter(db);
 
   // Standard-Bausteine initialisieren (simuliertes Kompendium)
-  await adapter.standardBausteineInitialisieren();
+  await svc.standardBausteineInitialisieren(db);
 
   // Basis-Informationsverbund
-  const verbund = await strukturAdapter.verbundAnlegen({
+  const verbund = await strukturSvc.verbundAnlegen(db, {
     institution_name: 'Modellierungs-Test GmbH',
     beschreibung: 'Testverbund für Modellierung',
     geltungsbereich: 'Gesamtes Unternehmen',
@@ -39,7 +32,7 @@ before(async () => {
   verbund_id = verbund.verbund_id;
 
   // Zielobjekte anlegen
-  const fileserver = await strukturAdapter.itSystemErfassen({
+  const fileserver = await strukturSvc.itSystemErfassen(db, {
     verbund_id,
     bezeichnung: 'Fileserver',
     typ: 'Server',
@@ -49,7 +42,7 @@ before(async () => {
   });
   fileserver_id = fileserver.system_id;
 
-  const webserver = await strukturAdapter.itSystemErfassen({
+  const webserver = await strukturSvc.itSystemErfassen(db, {
     verbund_id,
     bezeichnung: 'Webserver',
     typ: 'Server',
@@ -66,7 +59,7 @@ before(async () => {
 
 describe('AT-01: Baustein einem Zielobjekt zuordnen', () => {
   it('Happy Path – Baustein SYS.1.1 dem Fileserver zuordnen', async () => {
-    const eintrag = await adapter.bausteinZuordnen({
+    const eintrag = await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: fileserver_id,
       baustein_id: 'SYS.1.1',
@@ -81,7 +74,7 @@ describe('AT-01: Baustein einem Zielobjekt zuordnen', () => {
     expect(eintrag.anwendbar).to.equal(1);
 
     // Eintrag erscheint in der Modellierungsübersicht
-    const eintraege = await adapter.eintraegeByVerbundAbrufen(verbund_id);
+    const eintraege = await svc.eintraegeByVerbundAbrufen(db, verbund_id);
     const gefunden = eintraege.find(e => e.zielobjekt_id === fileserver_id && e.baustein_id === 'SYS.1.1');
     expect(gefunden).to.exist;
   });
@@ -94,7 +87,7 @@ describe('AT-01: Baustein einem Zielobjekt zuordnen', () => {
 describe('AT-02: Vollständige Modellierung als Prüfplan', () => {
   before(async () => {
     // Weitere Bausteine für vollständige Modellierung zuordnen
-    await adapter.bausteinZuordnen({
+    await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: fileserver_id,
       baustein_id: 'ISMS.1',
@@ -103,7 +96,7 @@ describe('AT-02: Vollständige Modellierung als Prüfplan', () => {
       erstellt_von: 'ISB'
     });
 
-    await adapter.bausteinZuordnen({
+    await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: fileserver_id,
       baustein_id: 'INF.2',
@@ -114,7 +107,7 @@ describe('AT-02: Vollständige Modellierung als Prüfplan', () => {
   });
 
   it('Happy Path – Prüfplan für Bestandssysteme erstellen', async () => {
-    const result = await adapter.dokumentationErstellen({
+    const result = await svc.dokumentationErstellen(db, {
       verbund_id,
       verwendungszweck: 'Prüfplan',
       version: '1.0',
@@ -140,7 +133,7 @@ describe('AT-03: Anforderungsanpassung bei erhöhtem Schutzbedarf', () => {
 
   before(async () => {
     // NET.1.1 dem Fileserver zuordnen für Anpassungstest
-    const eintrag = await adapter.bausteinZuordnen({
+    const eintrag = await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: fileserver_id,
       baustein_id: 'NET.1.1',
@@ -152,7 +145,7 @@ describe('AT-03: Anforderungsanpassung bei erhöhtem Schutzbedarf', () => {
   });
 
   it('Happy Path – Anforderungsanpassung mit Details gespeichert', async () => {
-    const eintrag = await adapter.anforderungAnpassen(eintrag_id, {
+    const eintrag = await svc.anforderungAnpassen(db, eintrag_id, {
       anpassung_details: 'Erhöhter Schutzbedarf C=sehr hoch: Zusätzliche Netzwerksegmentierung und Logging erforderlich',
       begruendung: 'Schutzbedarf sehr hoch erfordert Ergänzungen'
     });
@@ -171,7 +164,7 @@ describe('AT-04: Entwicklungskonzept für geplante Systeme', () => {
 
   before(async () => {
     // Geplantes System anlegen
-    const system = await strukturAdapter.itSystemErfassen({
+    const system = await strukturSvc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Geplanter Datenbank-Server',
       typ: 'Server',
@@ -181,7 +174,7 @@ describe('AT-04: Entwicklungskonzept für geplante Systeme', () => {
     });
     geplanter_server_id = system.system_id;
 
-    await adapter.bausteinZuordnen({
+    await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: geplanter_server_id,
       baustein_id: 'SYS.1.1',
@@ -192,7 +185,7 @@ describe('AT-04: Entwicklungskonzept für geplante Systeme', () => {
   });
 
   it('Happy Path – Entwicklungskonzept mit Verwendungszweck gesetzt', async () => {
-    const result = await adapter.dokumentationErstellen({
+    const result = await svc.dokumentationErstellen(db, {
       verbund_id,
       verwendungszweck: 'Entwicklungskonzept',
       version: '1.0',
@@ -215,7 +208,7 @@ describe('AT-04: Entwicklungskonzept für geplante Systeme', () => {
 describe('AT-05: Modellierung ohne Schutzbedarf nicht abschließbar', () => {
   it('Negativtest – Zielobjekte ohne Schutzbedarf verhindern Abschluss', async () => {
     try {
-      await adapter.dokumentationErstellen({
+      await svc.dokumentationErstellen(db, {
         verbund_id,
         verwendungszweck: 'Prüfplan',
         version: '2.0',
@@ -239,7 +232,7 @@ describe('AT-05: Modellierung ohne Schutzbedarf nicht abschließbar', () => {
 describe('AT-06: Ungültige Baustein-ID', () => {
   it('Negativtest – Nicht-existierende Baustein-ID wird abgelehnt', async () => {
     try {
-      await adapter.bausteinZuordnen({
+      await svc.bausteinZuordnen(db, {
         verbund_id,
         zielobjekt_id: fileserver_id,
         baustein_id: 'XYZ.9.9',
@@ -262,7 +255,7 @@ describe('AT-06: Ungültige Baustein-ID', () => {
 describe('AT-07: Doppelte Baustein-Zielobjekt-Zuordnung verhindert', () => {
   before(async () => {
     // Webserver dem APP.3.2-Baustein zuordnen
-    await adapter.bausteinZuordnen({
+    await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: webserver_id,
       baustein_id: 'APP.3.2',
@@ -274,7 +267,7 @@ describe('AT-07: Doppelte Baustein-Zielobjekt-Zuordnung verhindert', () => {
 
   it('Negativtest – Gleicher Baustein zweimal für gleiches Zielobjekt', async () => {
     try {
-      await adapter.bausteinZuordnen({
+      await svc.bausteinZuordnen(db, {
         verbund_id,
         zielobjekt_id: webserver_id,
         baustein_id: 'APP.3.2',
@@ -297,7 +290,7 @@ describe('AT-08: Anforderungsanpassung ohne Begründung nicht speicherbar', () =
   let eintrag_id;
 
   before(async () => {
-    const eintrag = await adapter.bausteinZuordnen({
+    const eintrag = await svc.bausteinZuordnen(db, {
       verbund_id,
       zielobjekt_id: webserver_id,
       baustein_id: 'OPS.1.1.2',
@@ -310,7 +303,7 @@ describe('AT-08: Anforderungsanpassung ohne Begründung nicht speicherbar', () =
 
   it('Negativtest – Anforderungsanpassung ohne anpassung_details abgelehnt', async () => {
     try {
-      await adapter.anforderungAnpassen(eintrag_id, {
+      await svc.anforderungAnpassen(db, eintrag_id, {
         anpassung_details: '',
         begruendung: 'Anpassung nötig'
       });
@@ -347,7 +340,7 @@ describe('Rollback-Tests: Modellierung', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM baustein')).rows[0].cnt);
 
     try {
-      await adapter.bausteinAnlegen({
+      await svc.bausteinAnlegen(db, {
         baustein_id: 'FAIL.1',
         bezeichnung: 'Fail',
         schicht: 'UNGUELTIG',
@@ -363,7 +356,7 @@ describe('Rollback-Tests: Modellierung', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM modellierungseintrag')).rows[0].cnt);
 
     try {
-      await adapter.bausteinZuordnen({
+      await svc.bausteinZuordnen(db, {
         verbund_id,
         zielobjekt_id: fileserver_id,
         baustein_id: 'NICHT.VORHANDEN',

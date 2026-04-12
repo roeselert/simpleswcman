@@ -6,23 +6,19 @@
 import { PGlite } from '@electric-sql/pglite';
 import { expect } from 'chai';
 import { initDb } from '../db.js';
-import { createAdapter as createStrukturAdapter } from '../strukturanalyse/adapter.js';
-import { createAdapter } from '../schutzbedarfsfeststellung/adapter.js';
+import * as strukturSvc from '../strukturanalyse/services.js';
+import * as svc from '../schutzbedarfsfeststellung/services.js';
 import { withTransaction } from '../db_transaction.js';
 
 let db;
-let adapter;
-let strukturAdapter;
 let verbund_id;
 
 before(async () => {
   db = new PGlite();
   await initDb(db);
-  adapter = createAdapter(db);
-  strukturAdapter = createStrukturAdapter(db);
 
   // Basis-Informationsverbund anlegen
-  const verbund = await strukturAdapter.verbundAnlegen({
+  const verbund = await strukturSvc.verbundAnlegen(db, {
     institution_name: 'Schutzbedarfs-Test AG',
     beschreibung: 'Testverbund für Schutzbedarfsfeststellung',
     geltungsbereich: 'Gesamte Organisation',
@@ -37,7 +33,7 @@ before(async () => {
 
 describe('US-01: Schutzbedarfskategorien definieren', () => {
   it('Happy Path – Kategorie erfolgreich definiert', async () => {
-    const kategorie = await adapter.kategorieDefinieren({
+    const kategorie = await svc.kategorieDefinieren(db, {
       verbund_id,
       bezeichnung: 'hoch',
       schadensszenario: 'Beeinträchtigung der Aufgabenerfüllung',
@@ -54,7 +50,7 @@ describe('US-01: Schutzbedarfskategorien definieren', () => {
 
   it('Negativtest – Kategorie ohne Konkretisierung', async () => {
     try {
-      await adapter.kategorieDefinieren({
+      await svc.kategorieDefinieren(db, {
         verbund_id,
         bezeichnung: 'normal',
         schadensszenario: 'Finanzielle Auswirkungen',
@@ -76,7 +72,7 @@ describe('US-02: Schadensszenarien bewerten', () => {
   let anwendung_id;
 
   before(async () => {
-    const anwendung = await strukturAdapter.anwendungErfassen({
+    const anwendung = await strukturSvc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'Finanzbuchhaltung',
       plattform: 'SAP',
@@ -86,7 +82,7 @@ describe('US-02: Schadensszenarien bewerten', () => {
   });
 
   it('Happy Path – Bewertung vollständig und begründet', async () => {
-    const bewertung = await adapter.schadensbewertungSpeichern({
+    const bewertung = await svc.schadensbewertungSpeichern(db, {
       zielobjekt_id: anwendung_id,
       zielobjekt_typ: 'Anwendung',
       schadensszenario: 'Gesetz',
@@ -104,7 +100,7 @@ describe('US-02: Schadensszenarien bewerten', () => {
 
   it('Negativtest – Bewertung ohne Begründung', async () => {
     try {
-      await adapter.schadensbewertungSpeichern({
+      await svc.schadensbewertungSpeichern(db, {
         zielobjekt_id: anwendung_id,
         zielobjekt_typ: 'Anwendung',
         schadensszenario: 'Finanziell',
@@ -128,7 +124,7 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
   let personalverwaltung_id;
 
   before(async () => {
-    const anwendung = await strukturAdapter.anwendungErfassen({
+    const anwendung = await strukturSvc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'Personalverwaltung',
       plattform: 'HR-System',
@@ -140,7 +136,7 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
     const szenarien = ['Gesetz', 'Selbstbestimmung', 'Unversehrtheit', 'Aufgabenerfüllung', 'Finanziell', 'Außenwirkung'];
     for (const szenario of szenarien) {
       for (const gw of ['Vertraulichkeit', 'Integrität', 'Verfügbarkeit']) {
-        await adapter.schadensbewertungSpeichern({
+        await svc.schadensbewertungSpeichern(db, {
           zielobjekt_id: personalverwaltung_id,
           zielobjekt_typ: 'Anwendung',
           schadensszenario: szenario,
@@ -154,7 +150,7 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
   });
 
   it('Happy Path – Gesamtschutzbedarf als Maximum berechnet', async () => {
-    const ergebnis = await adapter.schutzbedarfBerechnen(
+    const ergebnis = await svc.schutzbedarfBerechnen(db, 
       personalverwaltung_id,
       'Anwendung',
       'Maximumprinzip angewendet'
@@ -168,13 +164,13 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
   });
 
   it('Happy Path – Status wechselt auf abgeschlossen', async () => {
-    const ergebnis = await adapter.schutzbedarfAbschliessen(personalverwaltung_id);
+    const ergebnis = await svc.schutzbedarfAbschliessen(db, personalverwaltung_id);
     expect(ergebnis.status).to.equal('abgeschlossen');
   });
 
   it('Negativtest – Nicht alle Grundwerte bewertet', async () => {
     // Neue Anwendung ohne alle Grundwerte
-    const anwendung = await strukturAdapter.anwendungErfassen({
+    const anwendung = await strukturSvc.anwendungErfassen(db, {
       verbund_id,
       bezeichnung: 'Lagerverwaltung',
       plattform: 'WMS',
@@ -182,7 +178,7 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
     });
 
     // Nur Vertraulichkeit bewerten, Integrität und Verfügbarkeit fehlen
-    await adapter.schadensbewertungSpeichern({
+    await svc.schadensbewertungSpeichern(db, {
       zielobjekt_id: anwendung.anwendung_id,
       zielobjekt_typ: 'Anwendung',
       schadensszenario: 'Finanziell',
@@ -193,7 +189,7 @@ describe('US-03: Schutzbedarf für Anwendungen feststellen', () => {
     });
 
     try {
-      await adapter.schutzbedarfBerechnen(anwendung.anwendung_id, 'Anwendung');
+      await svc.schutzbedarfBerechnen(db, anwendung.anwendung_id, 'Anwendung');
       expect.fail('Sollte einen Fehler werfen');
     } catch (err) {
       expect(err.message).to.include('Für alle drei Grundwerte (C, I, A) muss mindestens eine Bewertung vorliegen');
@@ -211,7 +207,7 @@ describe('US-04/US-06: Schutzbedarf für IT-Systeme feststellen', () => {
 
   before(async () => {
     // IT-System anlegen
-    const system = await strukturAdapter.itSystemErfassen({
+    const system = await strukturSvc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Server S4',
       typ: 'Server',
@@ -231,7 +227,7 @@ describe('US-04/US-06: Schutzbedarf für IT-Systeme feststellen', () => {
   });
 
   it('Happy Path – Maximumprinzip korrekt angewendet', async () => {
-    const ergebnis = await adapter.itSystemSchutzbedarfVererben({
+    const ergebnis = await svc.itSystemSchutzbedarfVererben(db, {
       system_id: server_s4_id,
       zielobjekt_typ: 'IT-System',
       anwendungsErgebnisse: [fibu_ergebnis],
@@ -247,7 +243,7 @@ describe('US-04/US-06: Schutzbedarf für IT-Systeme feststellen', () => {
 
   it('Negativtest – Keine Anwendungen zugeordnet', async () => {
     try {
-      await adapter.itSystemSchutzbedarfVererben({
+      await svc.itSystemSchutzbedarfVererben(db, {
         system_id: server_s4_id,
         zielobjekt_typ: 'IT-System',
         anwendungsErgebnisse: [],
@@ -268,7 +264,7 @@ describe('US-07: Kumulationseffekt berücksichtigen', () => {
   let server_kum_id;
 
   before(async () => {
-    const system = await strukturAdapter.itSystemErfassen({
+    const system = await strukturSvc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Kumulations-Server',
       typ: 'Server',
@@ -285,7 +281,7 @@ describe('US-07: Kumulationseffekt berücksichtigen', () => {
       schutzbedarf_a: 'normal'
     }));
 
-    await adapter.itSystemSchutzbedarfVererben({
+    await svc.itSystemSchutzbedarfVererben(db, {
       system_id: server_kum_id,
       zielobjekt_typ: 'IT-System',
       anwendungsErgebnisse,
@@ -295,7 +291,7 @@ describe('US-07: Kumulationseffekt berücksichtigen', () => {
   });
 
   it('Happy Path – Kumulation korrekt erkannt und dokumentiert', async () => {
-    const ergebnis = await adapter.kumulationseffektDokumentieren({
+    const ergebnis = await svc.kumulationseffektDokumentieren(db, {
       zielobjekt_id: server_kum_id,
       zielobjekt_typ: 'IT-System',
       grundwert: 'Verfügbarkeit',
@@ -309,7 +305,7 @@ describe('US-07: Kumulationseffekt berücksichtigen', () => {
 
   it('Negativtest – Kumulation ohne ausreichende Begründung', async () => {
     try {
-      await adapter.kumulationseffektDokumentieren({
+      await svc.kumulationseffektDokumentieren(db, {
         zielobjekt_id: server_kum_id,
         zielobjekt_typ: 'IT-System',
         grundwert: 'Verfügbarkeit',
@@ -331,7 +327,7 @@ describe('US-08: Verteilungseffekt berücksichtigen', () => {
   let server_vert_id;
 
   before(async () => {
-    const system = await strukturAdapter.itSystemErfassen({
+    const system = await strukturSvc.itSystemErfassen(db, {
       verbund_id,
       bezeichnung: 'Verteilungs-Server',
       typ: 'Server',
@@ -342,7 +338,7 @@ describe('US-08: Verteilungseffekt berücksichtigen', () => {
     server_vert_id = system.system_id;
 
     // Schutzbedarf mit hoher Verfügbarkeit
-    await adapter.itSystemSchutzbedarfVererben({
+    await svc.itSystemSchutzbedarfVererben(db, {
       system_id: server_vert_id,
       zielobjekt_typ: 'IT-System',
       anwendungsErgebnisse: [{ schutzbedarf_c: 'hoch', schutzbedarf_i: 'hoch', schutzbedarf_a: 'hoch' }],
@@ -352,7 +348,7 @@ describe('US-08: Verteilungseffekt berücksichtigen', () => {
   });
 
   it('Happy Path – Verfügbarkeit korrekt reduziert', async () => {
-    const ergebnis = await adapter.verteilungseffektDokumentieren({
+    const ergebnis = await svc.verteilungseffektDokumentieren(db, {
       zielobjekt_id: server_vert_id,
       zielobjekt_typ: 'IT-System',
       ausfallsicher: true,
@@ -369,7 +365,7 @@ describe('US-08: Verteilungseffekt berücksichtigen', () => {
 
   it('Negativtest – Einzelausfall führt zum Anwendungsausfall', async () => {
     try {
-      await adapter.verteilungseffektDokumentieren({
+      await svc.verteilungseffektDokumentieren(db, {
         zielobjekt_id: server_vert_id,
         zielobjekt_typ: 'IT-System',
         ausfallsicher: false,
@@ -409,7 +405,7 @@ describe('Rollback-Tests: Schutzbedarfsfeststellung', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schadensbewertung')).rows[0].cnt);
 
     try {
-      await adapter.schadensbewertungSpeichern({
+      await svc.schadensbewertungSpeichern(db, {
         zielobjekt_id: 'some-id',
         zielobjekt_typ: 'Anwendung',
         schadensszenario: 'UngültigesScenario',
@@ -428,7 +424,7 @@ describe('Rollback-Tests: Schutzbedarfsfeststellung', () => {
     const before = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
 
     try {
-      await adapter.schutzbedarfBerechnen('unbekannte-id', 'Anwendung', 'Test');
+      await svc.schutzbedarfBerechnen(db, 'unbekannte-id', 'Anwendung', 'Test');
     } catch {}
 
     const after = parseInt((await db.query('SELECT COUNT(*) as cnt FROM schutzbedarf_ergebnis')).rows[0].cnt);
